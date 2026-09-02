@@ -38,6 +38,80 @@ public sealed class ComunaDirectory
             .ToList();
     }
 
+    /// <summary>
+    /// Intenta calzar un texto sucio del Excel (con tipeos: "VIÑA DELA MAR", "QUILPUE", espacios
+    /// dobles) contra el nombre oficial de una comuna del directorio. Devuelve el nombre canónico
+    /// o null si no hay match razonable. Descarta valores que claramente no son comuna
+    /// ("RUT INVALIDO", números, fechas).
+    /// </summary>
+    public string? ResolveComunaName(string? raw)
+    {
+        var folded = TextNormalization.Fold(raw);
+        if (folded.Length < 3 || folded.Any(char.IsDigit) || folded is "rut invalido" or "rut ivalido"
+            or "rur invalido" or "pendiente f8" or "1 licencia")
+        {
+            return null;
+        }
+
+        // Exacto (folded).
+        var exact = _byComuna[folded].FirstOrDefault();
+        if (exact is not null)
+        {
+            return exact.Comuna;
+        }
+
+        // Distancia de edición <= 2 contra cada nombre oficial folded.
+        string? best = null;
+        var bestDistance = int.MaxValue;
+        foreach (var name in _byComuna.Select(g => g.Key).Distinct())
+        {
+            var d = Levenshtein(folded, name, 2);
+            if (d < bestDistance)
+            {
+                bestDistance = d;
+                best = _byComuna[name].First().Comuna;
+            }
+        }
+
+        return bestDistance <= 2 ? best : null;
+    }
+
+    private static int Levenshtein(string a, string b, int max)
+    {
+        if (Math.Abs(a.Length - b.Length) > max)
+        {
+            return max + 1;
+        }
+
+        var prev = new int[b.Length + 1];
+        var curr = new int[b.Length + 1];
+        for (var j = 0; j <= b.Length; j++)
+        {
+            prev[j] = j;
+        }
+
+        for (var i = 1; i <= a.Length; i++)
+        {
+            curr[0] = i;
+            var rowMin = curr[0];
+            for (var j = 1; j <= b.Length; j++)
+            {
+                var cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                curr[j] = Math.Min(Math.Min(curr[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+                rowMin = Math.Min(rowMin, curr[j]);
+            }
+
+            if (rowMin > max)
+            {
+                return max + 1;
+            }
+
+            (prev, curr) = (curr, prev);
+        }
+
+        return prev[b.Length];
+    }
+
     private static List<ComunaContact> Parse(string csvPath)
     {
         var result = new List<ComunaContact>();

@@ -43,12 +43,12 @@
                 <span class="badge bg-warning text-dark">Falta o no existe</span>
                 <div><code>Peticion:ExcelPath</code> — ruta absoluta al .xlsx.</div>
             }
-            <div class="small text-muted mt-1">Hoja: @(string.IsNullOrWhiteSpace(Model.Options.ExcelSheetName) ? "(primera)" : Model.Options.ExcelSheetName)</div>
+            <div class="small text-muted mt-1">Se leen todas las hojas de agenda mensual (Av. Argentina, Placilla, Merc. Puerto). Se ignoran: @string.Join(", ", Model.Options.HojasIgnoradas)</div>
         </td>
     </tr>
     <tr>
         <th>Orden que dispara</th>
-        <td>Columna <code>@Model.Options.Columns.Tramite</code> == "<strong>@Model.Options.OrdenCambioDomicilio</strong>"</td>
+        <td>Columna <code>@Model.Options.Columns.EstadoCarpeta</code> == "<strong>@Model.Options.EstadoCambioDomicilio</strong>"</td>
     </tr>
     <tr>
         <th>Mapeo de columnas</th>
@@ -56,11 +56,11 @@
             <ul class="mb-0">
                 <li>Nombre: <code>@Model.Options.Columns.NombreCompleto</code></li>
                 <li>RUT: <code>@Model.Options.Columns.Rut</code></li>
-                <li>Comuna: <code>@Model.Options.Columns.Comuna</code></li>
+                <li>Estado de la carpeta: <code>@Model.Options.Columns.EstadoCarpeta</code></li>
+                <li>Comuna de origen: <code>@Model.Options.Columns.ComunaOrigen</code> (cuando trae texto, no fecha)</li>
                 <li>Fecha solicitud: <code>@Model.Options.Columns.FechaSolicitud</code></li>
-                <li>Clases: <code>@Model.Options.Columns.Clases</code></li>
             </ul>
-            <div class="small text-muted">Los encabezados se buscan sin distinguir mayúsculas ni tildes; el orden de columnas no importa.</div>
+            <div class="small text-muted">Encabezados sin distinguir mayúsculas ni tildes; fila de encabezado autodetectada; el orden de columnas no importa.</div>
         </td>
     </tr>
     <tr>

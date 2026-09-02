@@ -30,6 +30,40 @@ builder.Services.AddRazorPages();
 
 var app = builder.Build();
 
+// Importación headless: dotnet run -- --import ["ruta.xlsx"]
+if (args.Contains("--import"))
+{
+    var idx = Array.IndexOf(args, "--import");
+    var path = idx + 1 < args.Length && !args[idx + 1].StartsWith("--") ? args[idx + 1] : options.ExcelPath;
+    if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+    {
+        Console.Error.WriteLine($"Excel no encontrado: '{path}'. Pasá la ruta o configurá Peticion:ExcelPath.");
+        return;
+    }
+
+    var repo = app.Services.GetRequiredService<PeticionRepository>();
+    var importer = app.Services.GetRequiredService<ExcelPeticionImporter>();
+    var r = importer.Import(path, repo.AddIfNew);
+    Console.WriteLine($"Hojas leídas:          {r.HojasLeidas}");
+    Console.WriteLine($"Filas leídas:          {r.FilasLeidas}");
+    Console.WriteLine($"Filas CAMBIO DE DOM.:  {r.FilasCambioDomicilio}");
+    Console.WriteLine($"Peticiones nuevas:     {r.Nuevas}");
+    Console.WriteLine($"Duplicadas (ya había): {r.Duplicadas}");
+    Console.WriteLine($"RUT inválidos:         {r.RutInvalidos}");
+    Console.WriteLine($"Comuna no reconocida:  {r.ComunaNoReconocida}");
+    foreach (var aviso in r.Avisos.Take(40))
+    {
+        Console.WriteLine($"  - {aviso}");
+    }
+
+    if (r.Avisos.Count > 40)
+    {
+        Console.WriteLine($"  ... y {r.Avisos.Count - 40} avisos más.");
+    }
+
+    return;
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");

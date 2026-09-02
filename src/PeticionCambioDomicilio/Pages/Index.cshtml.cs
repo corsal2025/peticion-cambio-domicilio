@@ -53,11 +53,13 @@ public sealed class IndexModel : PageModel
         try
         {
             var result = _importer.Import(_options.ExcelPath!, _repository.AddIfNew);
-            var msg = $"Filas leídas: {result.FilasLeidas} · Cambio de domicilio: {result.FilasCambioDomicilio} · " +
-                      $"Nuevas: {result.Nuevas} · Duplicadas: {result.Duplicadas} · RUT inválidos: {result.RutInvalidos}";
+            var msg = $"Hojas: {result.HojasLeidas} · Filas: {result.FilasLeidas} · " +
+                      $"Cambio de domicilio: {result.FilasCambioDomicilio} · Nuevas: {result.Nuevas} · " +
+                      $"Duplicadas: {result.Duplicadas} · RUT inválidos: {result.RutInvalidos} · " +
+                      $"Comuna no reconocida: {result.ComunaNoReconocida}";
             if (result.Avisos.Count > 0)
             {
-                msg += " · Avisos: " + string.Join(" | ", result.Avisos.Take(10));
+                msg += $" · Avisos ({result.Avisos.Count}): " + string.Join(" | ", result.Avisos.Take(8));
             }
 
             TempData["Flash"] = msg;

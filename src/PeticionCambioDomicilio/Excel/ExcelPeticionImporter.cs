@@ -1,143 +1,216 @@
 using ClosedXML.Excel;
+using PeticionCambioDomicilio.Comunas;
 using PeticionCambioDomicilio.Domain;
 
 namespace PeticionCambioDomicilio.Excel;
 
 public sealed record ImportResult(
+    int HojasLeidas,
     int FilasLeidas,
     int FilasCambioDomicilio,
     int Nuevas,
     int Duplicadas,
     int RutInvalidos,
+    int ComunaNoReconocida,
     IReadOnlyList<string> Avisos);
 
 /// <summary>
-/// Lee el Excel de solicitudes, se queda con las filas cuya columna "Trámite" dice
-/// "CAMBIO DE DOMICILIO" (configurable), y extrae Nombre / RUT / Comuna / Fecha / Clases.
-/// Los encabezados se ubican por nombre sin distinguir mayúsculas ni tildes, así que el
-/// orden de las columnas en el Excel no importa.
+/// Lee el libro DETALLE CARPETAS (todas las hojas de agenda mensual: Av. Argentina, Placilla y
+/// Merc. Puerto de cada mes), se queda con las filas cuya columna "Estado de la carpeta" dice
+/// "CAMBIO DE DOMICILIO" (configurable) y arma una petición por fila:
+///   Nombre  = NOMBRE COMPLETO
+///   RUT     = RUT (normalizado y validado)
+///   Comuna  = FECHA ULTIMA CARPETA (cuando trae texto de comuna, no fecha) — calzada contra el directorio
+///   Fecha   = FECHA DE LA CITACION
+/// Los encabezados se ubican por nombre sin distinguir mayúsculas ni tildes; la fila de encabezado
+/// se detecta sola (primera que contiene "RUT"). El orden de las columnas no importa.
 /// </summary>
 public sealed class ExcelPeticionImporter
 {
     private readonly AppOptions _options;
+    private readonly ComunaDirectory _directory;
 
-    public ExcelPeticionImporter(AppOptions options) => _options = options;
+    public ExcelPeticionImporter(AppOptions options, ComunaDirectory directory)
+    {
+        _options = options;
+        _directory = directory;
+    }
 
     public ImportResult Import(string excelPath, Func<Peticion, bool> addIfNew)
     {
         var avisos = new List<string>();
-        using var workbook = new XLWorkbook(excelPath);
 
-        var sheet = string.IsNullOrWhiteSpace(_options.ExcelSheetName)
-            ? workbook.Worksheets.First()
-            : workbook.Worksheets.Worksheet(_options.ExcelSheetName);
-
-        var used = sheet.RangeUsed();
-        if (used is null)
+        // El libro real trae listas desplegables > 255 chars que ClosedXML rechaza: se lee una
+        // copia temporal sin esos nodos. El original nunca se toca.
+        string? sanitizedPath = null;
+        XLWorkbook workbook;
+        try
         {
-            return new ImportResult(0, 0, 0, 0, 0, new[] { "La hoja está vacía." });
+            workbook = new XLWorkbook(excelPath);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            sanitizedPath = WorkbookSanitizer.CreateCopyWithoutDataValidations(excelPath);
+            workbook = new XLWorkbook(sanitizedPath);
         }
 
-        var headerRow = used.FirstRow();
-        var headers = new Dictionary<string, int>();
-        foreach (var cell in headerRow.Cells())
+        try
         {
-            var key = TextNormalization.Fold(cell.GetString());
-            if (key.Length > 0 && !headers.ContainsKey(key))
+            return ImportCore(workbook, avisos, addIfNew);
+        }
+        finally
+        {
+            workbook.Dispose();
+            if (sanitizedPath is not null)
             {
-                headers[key] = cell.Address.ColumnNumber;
+                try { File.Delete(sanitizedPath); } catch { /* archivo temporal */ }
             }
         }
+    }
 
-        int? Col(string configured)
+    private ImportResult ImportCore(XLWorkbook workbook, List<string> avisos, Func<Peticion, bool> addIfNew)
+    {
+
+        var ordenObjetivo = TextNormalization.Fold(_options.EstadoCambioDomicilio);
+        var ignoradas = _options.HojasIgnoradas.Select(TextNormalization.Fold).ToArray();
+
+        int hojas = 0, filas = 0, cd = 0, nuevas = 0, dup = 0, rutInv = 0, comunaNo = 0;
+
+        foreach (var sheet in workbook.Worksheets)
         {
-            var key = TextNormalization.Fold(configured);
-            return headers.TryGetValue(key, out var c) ? c : null;
-        }
-
-        var cTramite = Col(_options.Columns.Tramite);
-        var cNombre = Col(_options.Columns.NombreCompleto);
-        var cRut = Col(_options.Columns.Rut);
-        var cComuna = Col(_options.Columns.Comuna);
-        var cFecha = Col(_options.Columns.FechaSolicitud);
-        var cClases = Col(_options.Columns.Clases);
-
-        foreach (var (label, col, name) in new[]
-                 {
-                     ("Trámite", cTramite, _options.Columns.Tramite),
-                     ("Nombre", cNombre, _options.Columns.NombreCompleto),
-                     ("RUT", cRut, _options.Columns.Rut),
-                     ("Comuna", cComuna, _options.Columns.Comuna),
-                 })
-        {
-            if (col is null)
-            {
-                avisos.Add($"No se encontró la columna de {label} (encabezado esperado: \"{name}\").");
-            }
-        }
-
-        if (cTramite is null || cNombre is null || cRut is null || cComuna is null)
-        {
-            return new ImportResult(0, 0, 0, 0, 0, avisos);
-        }
-
-        var ordenObjetivo = TextNormalization.Fold(_options.OrdenCambioDomicilio);
-        int filasLeidas = 0, filasCd = 0, nuevas = 0, duplicadas = 0, rutInvalidos = 0;
-
-        foreach (var row in used.RowsUsed().Skip(1))
-        {
-            filasLeidas++;
-
-            var tramite = TextNormalization.Fold(row.Cell(cTramite.Value).GetString());
-            if (tramite != ordenObjetivo)
+            var sheetFolded = TextNormalization.Fold(sheet.Name);
+            if (ignoradas.Any(ig => sheetFolded.Contains(ig)))
             {
                 continue;
             }
 
-            filasCd++;
-
-            var nombre = row.Cell(cNombre.Value).GetString().Trim();
-            var rutRaw = row.Cell(cRut.Value).GetString().Trim();
-            var comuna = row.Cell(cComuna.Value).GetString().Trim();
-            var clases = cClases is null ? null : row.Cell(cClases.Value).GetString().Trim();
-            var fecha = cFecha is null ? null : ReadDate(row.Cell(cFecha.Value));
-
-            if (string.IsNullOrWhiteSpace(nombre) && string.IsNullOrWhiteSpace(rutRaw))
+            var used = sheet.RangeUsed();
+            if (used is null)
             {
-                avisos.Add($"Fila {row.RowNumber()}: sin nombre ni RUT, se omite.");
                 continue;
             }
 
-            var rutNormalizado = RutValidator.NormalizeAndValidate(rutRaw);
-            var rutInvalido = rutNormalizado is null;
-            if (rutInvalido)
+            var (headerRowNumber, headers) = FindHeaderRow(used);
+            if (headerRowNumber is null)
             {
-                rutInvalidos++;
-                avisos.Add($"Fila {row.RowNumber()}: RUT \"{rutRaw}\" no valida — se guarda para revisión.");
+                avisos.Add($"Hoja \"{sheet.Name}\": no se encontró la fila de encabezados (con \"RUT\"), se omite.");
+                continue;
             }
 
-            var peticion = new Peticion
-            {
-                NombreCompleto = nombre,
-                Rut = rutNormalizado ?? (rutRaw.Length > 0 ? rutRaw : "SIN RUT"),
-                Comuna = comuna,
-                Clases = string.IsNullOrWhiteSpace(clases) ? null : clases,
-                FechaSolicitud = fecha,
-                Origen = $"{sheet.Name}!fila {row.RowNumber()}",
-                RutInvalido = rutInvalido,
-            };
+            int? Col(string name) =>
+                headers.TryGetValue(TextNormalization.Fold(name), out var c) ? c : null;
 
-            if (addIfNew(peticion))
+            var cNombre = Col(_options.Columns.NombreCompleto);
+            var cRut = Col(_options.Columns.Rut);
+            var cEstado = Col(_options.Columns.EstadoCarpeta);
+            var cComuna = Col(_options.Columns.ComunaOrigen);
+            var cFecha = Col(_options.Columns.FechaSolicitud);
+            var cClases = Col(_options.Columns.Clases);
+
+            if (cNombre is null || cRut is null || cEstado is null || cComuna is null)
             {
-                nuevas++;
+                avisos.Add($"Hoja \"{sheet.Name}\": faltan columnas obligatorias " +
+                           $"(Nombre/{cNombre}, RUT/{cRut}, Estado/{cEstado}, Comuna/{cComuna}), se omite.");
+                continue;
             }
-            else
+
+            hojas++;
+
+            foreach (var row in used.Rows())
             {
-                duplicadas++;
+                if (row.RowNumber() <= headerRowNumber.Value)
+                {
+                    continue;
+                }
+
+                if (cRut is null || row.Cell(cRut.Value).IsEmpty())
+                {
+                    continue;
+                }
+
+                filas++;
+
+                var estado = TextNormalization.Fold(row.Cell(cEstado.Value).GetString());
+                if (estado != ordenObjetivo)
+                {
+                    continue;
+                }
+
+                cd++;
+
+                var nombre = row.Cell(cNombre.Value).GetString().Trim();
+                var rutRaw = row.Cell(cRut.Value).GetString().Trim();
+                var comunaRaw = row.Cell(cComuna.Value).GetString().Trim();
+                var clases = cClases is null ? null : row.Cell(cClases.Value).GetString().Trim();
+                var fecha = cFecha is null ? null : ReadDate(row.Cell(cFecha.Value));
+
+                var rutNormalizado = RutValidator.NormalizeAndValidate(rutRaw);
+                var rutInvalido = rutNormalizado is null;
+                if (rutInvalido)
+                {
+                    rutInv++;
+                    avisos.Add($"{sheet.Name}!fila {row.RowNumber()}: RUT \"{rutRaw}\" no valida — se guarda para revisión.");
+                }
+
+                var comunaCanonica = _directory.ResolveComunaName(comunaRaw);
+                if (comunaCanonica is null)
+                {
+                    comunaNo++;
+                    avisos.Add($"{sheet.Name}!fila {row.RowNumber()}: comuna \"{comunaRaw}\" no se reconoce en el directorio — se guarda para revisión.");
+                }
+
+                var peticion = new Peticion
+                {
+                    NombreCompleto = nombre.Length > 0 ? nombre : "(sin nombre)",
+                    Rut = rutNormalizado ?? (rutRaw.Length > 0 ? rutRaw : "SIN RUT"),
+                    Comuna = comunaCanonica ?? (comunaRaw.Length > 0 ? comunaRaw : "(sin comuna)"),
+                    Clases = string.IsNullOrWhiteSpace(clases) ? null : clases,
+                    FechaSolicitud = fecha,
+                    Origen = $"{sheet.Name}!fila {row.RowNumber()}",
+                    RutInvalido = rutInvalido,
+                    Estado = comunaCanonica is null ? EstadoPeticion.SinCorreoComuna : EstadoPeticion.Borrador,
+                    DetalleEstado = comunaCanonica is null ? $"Comuna del Excel: \"{comunaRaw}\"" : null,
+                };
+
+                if (addIfNew(peticion))
+                {
+                    nuevas++;
+                }
+                else
+                {
+                    dup++;
+                }
             }
         }
 
-        return new ImportResult(filasLeidas, filasCd, nuevas, duplicadas, rutInvalidos, avisos);
+        return new ImportResult(hojas, filas, cd, nuevas, dup, rutInv, comunaNo, avisos);
+    }
+
+    private static (int? RowNumber, Dictionary<string, int> Headers) FindHeaderRow(IXLRange used)
+    {
+        foreach (var row in used.Rows().Take(8))
+        {
+            var cells = row.Cells().ToList();
+            var hasRut = cells.Any(c => TextNormalization.Fold(c.GetString()) == "rut");
+            if (!hasRut)
+            {
+                continue;
+            }
+
+            var headers = new Dictionary<string, int>();
+            foreach (var cell in cells)
+            {
+                var key = TextNormalization.Fold(cell.GetString());
+                if (key.Length > 0 && !headers.ContainsKey(key))
+                {
+                    headers[key] = cell.Address.ColumnNumber;
+                }
+            }
+
+            return (row.RowNumber(), headers);
+        }
+
+        return (null, new Dictionary<string, int>());
     }
 
     private static DateOnly? ReadDate(IXLCell cell)
