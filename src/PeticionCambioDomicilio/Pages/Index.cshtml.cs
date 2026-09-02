@@ -39,6 +39,7 @@ public sealed class IndexModel : PageModel
     public bool ExcelConfigurado => !string.IsNullOrWhiteSpace(_options.ExcelPath) && System.IO.File.Exists(_options.ExcelPath);
     public string? ExcelPath => _options.ExcelPath;
     public int ComunasEnDirectorio => _directory.Count;
+    public string? ModoPruebaEmail => string.IsNullOrWhiteSpace(_options.TestModeEmail) ? null : _options.TestModeEmail;
 
     public void OnGet() => Peticiones = _repository.All();
 

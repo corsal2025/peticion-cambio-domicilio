@@ -5,6 +5,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>PeticionCambioDomicilio</RootNamespace>
+    <!-- WinExe: sin ventana de consola ni entrada en la barra de tareas.
+         Los modos de linea de comandos se reenganchan a la consola del padre
+         (ver ConsoleAttach en Program.cs). -->
+    <OutputType>WinExe</OutputType>
   </PropertyGroup>
 
   <ItemGroup>

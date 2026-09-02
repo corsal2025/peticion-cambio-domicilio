@@ -7,6 +7,15 @@
 
 <h1 class="h3 mb-3">Peticiones de cambio de domicilio</h1>
 
+@if (Model.ModoPruebaEmail is not null)
+{
+    <div class="alert alert-danger py-2">
+        <strong>MODO PRUEBA ACTIVO.</strong> Ningun correo sale hacia las municipalidades.
+        Todo se desvia a <code>@Model.ModoPruebaEmail</code>.
+        Para enviar de verdad, vaciar <code>Peticion:TestModeEmail</code> en appsettings.Local.json.
+    </div>
+}
+
 <div class="row mb-3">
     <div class="col">
         @if (!Model.MailListo)

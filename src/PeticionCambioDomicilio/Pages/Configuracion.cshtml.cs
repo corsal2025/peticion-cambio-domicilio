@@ -22,6 +22,7 @@ public sealed class ConfiguracionModel : PageModel
     public bool MailListo => _mail.IsConfigured;
     public bool ExcelExiste => !string.IsNullOrWhiteSpace(_options.ExcelPath) && System.IO.File.Exists(_options.ExcelPath);
     public int ComunasCount => _directory.Count;
+    public string? ModoPruebaEmail => string.IsNullOrWhiteSpace(_options.TestModeEmail) ? null : _options.TestModeEmail;
 
     public void OnGet() { }
 }

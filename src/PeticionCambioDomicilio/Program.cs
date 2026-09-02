@@ -30,6 +30,116 @@ builder.Services.AddRazorPages();
 
 var app = builder.Build();
 
+// Los modos CLI necesitan consola: el .exe es WinExe (sin ventana propia).
+if (args.Any(a => a.StartsWith("--import") || a == "--send-test" || a == "--test-ews"))
+{
+    ConsoleAttach.ToParentIfAny();
+}
+
+// Diagnostico de la conexion al buzon: dotnet run -- --test-ews
+// OJO: cada intento fallido cuenta para el bloqueo de la cuenta en el dominio. No repetir a ciegas.
+if (args.Contains("--test-ews"))
+{
+    var e = options.Ews;
+    Console.WriteLine($"Url:      {e?.Url ?? "(sin configurar)"}");
+    Console.WriteLine($"Username: {e?.Username ?? "(sin configurar)"}");
+    Console.WriteLine($"Password: {(string.IsNullOrEmpty(e?.Password) ? "(sin configurar)" : new string('*', e!.Password!.Length))}");
+    Console.WriteLine();
+
+    if (e?.Url is null)
+    {
+        Console.Error.WriteLine("Falta Peticion:Ews:Url.");
+        return;
+    }
+
+    using (var probe = new HttpClient { Timeout = TimeSpan.FromSeconds(30) })
+    {
+        try
+        {
+            using var anon = await probe.PostAsync(e.Url,
+                new StringContent("<x/>", System.Text.Encoding.UTF8, "text/xml"));
+            Console.WriteLine($"Sondeo anonimo: HTTP {(int)anon.StatusCode}");
+            if (anon.Headers.TryGetValues("WWW-Authenticate", out var schemes))
+            {
+                Console.WriteLine($"El servidor acepta: {string.Join(" | ", schemes)}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"No se pudo alcanzar el servidor: {ex.Message}");
+            return;
+        }
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("Probando las credenciales configuradas (UN solo intento)...");
+    var sender = app.Services.GetRequiredService<IMailSender>();
+    if (!sender.IsConfigured)
+    {
+        Console.Error.WriteLine("El transporte no esta configurado (faltan Url/Username/Password).");
+        return;
+    }
+
+    var destino = string.IsNullOrWhiteSpace(options.TestModeEmail) ? options.MailboxAddress : options.TestModeEmail!;
+    try
+    {
+        await sender.SendAsync(destino, "[PRUEBA] Conexion EWS", "Prueba de conexion del dashboard Peticion de Cambio de Domicilio.", CancellationToken.None);
+        Console.WriteLine($"OK: credenciales aceptadas. Correo de prueba enviado a {destino}.");
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"FALLO: {ex.Message}");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("Si dice 401 Unauthorized, probar con sistemas:");
+        Console.Error.WriteLine(@"  - Username como DOMINIO\usuario (ej. munivalpo\cambiodedomicilio) en vez del correo.");
+        Console.Error.WriteLine("  - Que la cuenta tenga Basic auth habilitado en Exchange para EWS.");
+        Console.Error.WriteLine("  - Que la clave sea la vigente (no expirada).");
+        Console.Error.WriteLine("NO repetir muchas veces: la cuenta se bloquea por intentos fallidos.");
+        Environment.ExitCode = 1;
+    }
+
+    return;
+}
+
+// Prueba de envio de punta a punta: dotnet run -- --send-test
+// Usa una peticion de ejemplo y el mismo camino que el boton "Enviar" del dashboard.
+// Con Peticion:TestModeEmail configurado, el correo NO sale hacia ninguna municipalidad.
+if (args.Contains("--send-test"))
+{
+    var repoT = app.Services.GetRequiredService<PeticionRepository>();
+    var senderT = app.Services.GetRequiredService<PeticionSender>();
+    var dirT = app.Services.GetRequiredService<ComunaDirectory>();
+
+    if (string.IsNullOrWhiteSpace(options.TestModeEmail))
+    {
+        Console.Error.WriteLine("ABORTADO: Peticion:TestModeEmail esta vacio. No se hacen pruebas con envio real.");
+        return;
+    }
+
+    var comunaPrueba = dirT.ComunaNames().FirstOrDefault() ?? "VINA DEL MAR";
+    var prueba = new Peticion
+    {
+        NombreCompleto = "PRUEBA INTERNA DEL SISTEMA",
+        Rut = "11.111.111-1",
+        Comuna = comunaPrueba,
+        Origen = "prueba manual (--send-test)",
+    };
+
+    repoT.AddIfNew(prueba);
+    var creada = repoT.All().FirstOrDefault(x => x.Origen == "prueba manual (--send-test)");
+    if (creada is null)
+    {
+        Console.Error.WriteLine("No se pudo crear la peticion de prueba.");
+        return;
+    }
+
+    Console.WriteLine($"Enviando prueba -> casilla {options.TestModeEmail} (comuna simulada: {comunaPrueba})...");
+    var res = await senderT.SendAsync(creada.Id, CancellationToken.None);
+    Console.WriteLine($"Resultado: {res.Estado} - {res.Mensaje}");
+    repoT.Delete(creada.Id);
+    return;
+}
+
 // Importar el directorio de comunas desde el libro: dotnet run -- --import-comunas ["ruta.xlsx"]
 if (args.Contains("--import-comunas"))
 {

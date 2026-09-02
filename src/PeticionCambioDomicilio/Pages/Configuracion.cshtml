@@ -28,6 +28,21 @@
         </td>
     </tr>
     <tr>
+        <th>Modo prueba</th>
+        <td>
+            @if (Model.ModoPruebaEmail is not null)
+            {
+                <span class="badge bg-danger">ACTIVO</span>
+                <div>Todo se desvia a <code>@Model.ModoPruebaEmail</code>. Nada llega a las municipalidades.</div>
+            }
+            else
+            {
+                <span class="badge bg-success">Apagado - envio real</span>
+                <div class="small text-muted">Para probar sin riesgo, poner <code>Peticion:TestModeEmail</code> con tu correo.</div>
+            }
+        </td>
+    </tr>
+    <tr>
         <th>Buzón remitente</th>
         <td>@Model.Options.MailboxAddress</td>
     </tr>

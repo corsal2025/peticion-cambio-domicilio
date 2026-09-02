@@ -31,6 +31,14 @@ public sealed class AppOptions
     /// <summary>Correo institucional (aparece como firma / remitente).</summary>
     public string MailboxAddress { get; set; } = "cambiodedomicilio@munivalpo.cl";
 
+    /// <summary>
+    /// MODO PRUEBA. Si tiene una dirección, NINGÚN correo sale hacia las municipalidades:
+    /// todos se desvían a esta casilla, con el asunto prefijado [PRUEBA] y una cabecera en el
+    /// cuerpo que dice a qué comuna y a qué direcciones habría ido. Vacío = envío real.
+    /// Es la red de seguridad para probar sin escribirle a 300 municipios por error.
+    /// </summary>
+    public string? TestModeEmail { get; set; }
+
     public EwsOptions? Ews { get; set; }
 }
 

@@ -60,9 +60,29 @@ public sealed class PeticionSender
         var subject = EmailTemplate.Subject(p);
         var body = EmailTemplate.Body(p, _options.MailboxAddress);
 
+        // MODO PRUEBA: nada sale hacia la municipalidad. Un solo correo a la casilla de prueba,
+        // marcado, diciendo a dónde habría ido de verdad.
+        var modoPrueba = !string.IsNullOrWhiteSpace(_options.TestModeEmail);
+        var realDestinatarios = destinatarios;
+        if (modoPrueba)
+        {
+            subject = $"[PRUEBA] {subject}";
+            var cabecera = new[]
+            {
+                "*** CORREO DE PRUEBA - NO SE ENVIO A LA MUNICIPALIDAD ***",
+                $"Comuna destino real: {p.Comuna}",
+                $"Habria ido a: {string.Join(", ", destinatarios)}",
+                new string('-', 60),
+                string.Empty,
+                string.Empty,
+            };
+            body = string.Join("\n", cabecera) + body;
+            realDestinatarios = new[] { _options.TestModeEmail!.Trim() };
+        }
+
         try
         {
-            foreach (var to in destinatarios)
+            foreach (var to in realDestinatarios)
             {
                 await _mail.SendAsync(to, subject, body, cancellationToken);
             }
@@ -74,8 +94,12 @@ public sealed class PeticionSender
             return new SendResult(EstadoPeticion.Error, $"Falló el envío: {ex.Message}");
         }
 
-        var joined = string.Join(", ", destinatarios);
-        _repository.UpdateEstado(p.Id, EstadoPeticion.Enviada, null, DateTimeOffset.Now, joined);
-        return new SendResult(EstadoPeticion.Enviada, $"Enviada a {joined}.");
+        var joined = string.Join(", ", realDestinatarios);
+        var detalle = modoPrueba ? $"MODO PRUEBA — desviada desde {string.Join(", ", destinatarios)}" : null;
+        _repository.UpdateEstado(p.Id, EstadoPeticion.Enviada, detalle, DateTimeOffset.Now, joined);
+        return new SendResult(EstadoPeticion.Enviada,
+            modoPrueba
+                ? $"[PRUEBA] Enviada a {joined} (habría ido a {p.Comuna})."
+                : $"Enviada a {joined}.");
     }
 }
