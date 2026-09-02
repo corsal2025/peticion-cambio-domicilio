@@ -1,0 +1,70 @@
+@page
+@model PeticionCambioDomicilio.Pages.ConfiguracionModel
+@{
+    ViewData["Title"] = "Configuración";
+}
+
+<h1 class="h3 mb-3">Configuración</h1>
+
+<p class="text-muted">
+    Todo se edita en <code>appsettings.Local.json</code> (junto al ejecutable, no viaja en git).
+    Después reiniciá la app.
+</p>
+
+<table class="table">
+    <tr>
+        <th style="width: 30%">Correo EWS</th>
+        <td>
+            @if (Model.MailListo)
+            {
+                <span class="badge bg-success">Configurado</span> <text>@Model.Options.Ews?.Url</text>
+            }
+            else
+            {
+                <span class="badge bg-warning text-dark">Falta</span>
+                <div>Sección <code>Peticion:Ews</code> con <code>Url</code>, <code>Username</code>, <code>Password</code>.</div>
+                <div>Url típica: <code>https://mail.munivalpo.cl/EWS/Exchange.asmx</code></div>
+            }
+        </td>
+    </tr>
+    <tr>
+        <th>Buzón remitente</th>
+        <td>@Model.Options.MailboxAddress</td>
+    </tr>
+    <tr>
+        <th>Excel de solicitudes</th>
+        <td>
+            @if (Model.ExcelExiste)
+            {
+                <span class="badge bg-success">OK</span> <code>@Model.Options.ExcelPath</code>
+            }
+            else
+            {
+                <span class="badge bg-warning text-dark">Falta o no existe</span>
+                <div><code>Peticion:ExcelPath</code> — ruta absoluta al .xlsx.</div>
+            }
+            <div class="small text-muted mt-1">Hoja: @(string.IsNullOrWhiteSpace(Model.Options.ExcelSheetName) ? "(primera)" : Model.Options.ExcelSheetName)</div>
+        </td>
+    </tr>
+    <tr>
+        <th>Orden que dispara</th>
+        <td>Columna <code>@Model.Options.Columns.Tramite</code> == "<strong>@Model.Options.OrdenCambioDomicilio</strong>"</td>
+    </tr>
+    <tr>
+        <th>Mapeo de columnas</th>
+        <td>
+            <ul class="mb-0">
+                <li>Nombre: <code>@Model.Options.Columns.NombreCompleto</code></li>
+                <li>RUT: <code>@Model.Options.Columns.Rut</code></li>
+                <li>Comuna: <code>@Model.Options.Columns.Comuna</code></li>
+                <li>Fecha solicitud: <code>@Model.Options.Columns.FechaSolicitud</code></li>
+                <li>Clases: <code>@Model.Options.Columns.Clases</code></li>
+            </ul>
+            <div class="small text-muted">Los encabezados se buscan sin distinguir mayúsculas ni tildes; el orden de columnas no importa.</div>
+        </td>
+    </tr>
+    <tr>
+        <th>Directorio de comunas</th>
+        <td>@Model.ComunasCount registros cargados</td>
+    </tr>
+</table>

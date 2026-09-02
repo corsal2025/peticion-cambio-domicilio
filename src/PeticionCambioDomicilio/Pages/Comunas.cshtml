@@ -1,0 +1,25 @@
+@page
+@model PeticionCambioDomicilio.Pages.ComunasModel
+@{
+    ViewData["Title"] = "Comunas";
+}
+
+<h1 class="h3 mb-3">Directorio de correos municipales</h1>
+
+<form method="get" class="mb-3">
+    <div class="input-group" style="max-width: 420px;">
+        <input type="text" name="q" value="@Model.Filtro" class="form-control" placeholder="Buscar comuna o correo" />
+        <button class="btn btn-outline-primary">Buscar</button>
+    </div>
+</form>
+
+<table class="table table-sm table-striped">
+    <thead><tr><th>Comuna</th><th>Correo</th><th>Dominio</th></tr></thead>
+    <tbody>
+    @foreach (var c in Model.Contactos)
+    {
+        <tr><td>@c.Comuna</td><td>@c.Email</td><td>@c.Domain</td></tr>
+    }
+    </tbody>
+</table>
+<p class="text-muted small">@Model.Contactos.Count registros. Fuente: <code>data/comunas.csv</code> (directorio oficial de LicenciasCarpetas).</p>
