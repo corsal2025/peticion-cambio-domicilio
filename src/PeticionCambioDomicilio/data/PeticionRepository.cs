@@ -77,18 +77,43 @@ public sealed class PeticionRepository
         return cn;
     }
 
-    /// <summary>Inserta si no existe (Rut+Comuna). Devuelve true si insertó, false si ya existía.</summary>
+    /// <summary>
+    /// Inserta la peticion; si ya existe una con el mismo (Rut, Comuna), REFRESCA los campos que
+    /// vienen del Excel — nombre, clases, fecha, origen, oficina, orden y validez del RUT — porque
+    /// el libro es la fuente de la verdad para esos datos.
+    /// NUNCA pisa lo que puso el operador: Marcada, Estado, DetalleEstado, EnviadaEn,
+    /// DestinatariosCorreo y CreadaEn quedan como estaban.
+    /// Devuelve true si era nueva, false si ya existia y se refresco.
+    /// </summary>
     public bool AddIfNew(Peticion p)
     {
         using var cn = Open();
+
+        bool yaExistia;
+        using (var check = cn.CreateCommand())
+        {
+            check.CommandText = "SELECT COUNT(*) FROM Peticion WHERE Rut = $rut AND Comuna = $comuna;";
+            check.Parameters.AddWithValue("$rut", p.Rut);
+            check.Parameters.AddWithValue("$comuna", p.Comuna);
+            yaExistia = Convert.ToInt64(check.ExecuteScalar()) > 0;
+        }
+
         using var cmd = cn.CreateCommand();
         cmd.CommandText = """
-            INSERT OR IGNORE INTO Peticion
+            INSERT INTO Peticion
                 (NombreCompleto, Rut, Comuna, Clases, FechaSolicitud, Origen, Oficina,
                  OrdenImportacion, RutInvalido, Estado, CreadaEn)
             VALUES
                 ($nombre, $rut, $comuna, $clases, $fecha, $origen, $oficina,
-                 $orden, $rutInvalido, $estado, $creada);
+                 $orden, $rutInvalido, $estado, $creada)
+            ON CONFLICT (Rut, Comuna) DO UPDATE SET
+                NombreCompleto   = excluded.NombreCompleto,
+                Clases           = excluded.Clases,
+                FechaSolicitud   = excluded.FechaSolicitud,
+                Origen           = excluded.Origen,
+                Oficina          = excluded.Oficina,
+                OrdenImportacion = excluded.OrdenImportacion,
+                RutInvalido      = excluded.RutInvalido;
             """;
         cmd.Parameters.AddWithValue("$nombre", p.NombreCompleto);
         cmd.Parameters.AddWithValue("$rut", p.Rut);
@@ -101,7 +126,9 @@ public sealed class PeticionRepository
         cmd.Parameters.AddWithValue("$rutInvalido", p.RutInvalido ? 1 : 0);
         cmd.Parameters.AddWithValue("$estado", (int)p.Estado);
         cmd.Parameters.AddWithValue("$creada", p.CreadaEn.ToString("o"));
-        return cmd.ExecuteNonQuery() > 0;
+        cmd.ExecuteNonQuery();
+
+        return !yaExistia;
     }
 
     public IReadOnlyList<Peticion> All()

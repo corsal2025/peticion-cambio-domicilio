@@ -93,7 +93,7 @@
                     <div class="small text-muted">@p.EnviadaEn.Value.ToString("dd-MM-yyyy HH:mm") → @p.DestinatariosCorreo</div>
                 }
             </td>
-            <td>@p.Oficina</td>
+            <td title="@p.Origen" style="cursor:help">@p.Oficina</td>
             <td class="text-nowrap">
                 <form method="post" class="d-inline">
                     <input type="hidden" name="id" value="@p.Id" />
