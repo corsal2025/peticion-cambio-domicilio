@@ -125,7 +125,7 @@ public sealed class IndexModel : PageModel
             return RedirectToPage();
         }
 
-        return File(bytes, "message/rfc822", EmlWriter.FileNameFor(p));
+        return File(bytes, "message/rfc822", _eml.FileNameFor(p));
     }
 
     /// <summary>Genera un .eml por cada peticion pendiente en una carpeta del Escritorio.</summary>
@@ -150,7 +150,7 @@ public sealed class IndexModel : PageModel
                 continue;
             }
 
-            System.IO.File.WriteAllBytes(Path.Combine(carpeta, EmlWriter.FileNameFor(p)), bytes);
+            System.IO.File.WriteAllBytes(Path.Combine(carpeta, _eml.FileNameFor(p)), bytes);
             escritos++;
         }
 

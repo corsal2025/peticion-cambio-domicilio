@@ -20,9 +20,10 @@ public sealed class EmlWriter
     }
 
     /// <summary>Nombre de archivo seguro para Windows, reconocible en la carpeta.</summary>
-    public static string FileNameFor(Peticion p)
+    public string FileNameFor(Peticion p)
     {
-        var crudo = $"{p.Comuna} - {p.NombreCompleto} - {p.Rut}.eml";
+        var prefijo = string.IsNullOrWhiteSpace(_options.TestModeEmail) ? "" : "PRUEBA - ";
+        var crudo = $"{prefijo}{p.Comuna} - {p.NombreCompleto} - {p.Rut}.eml";
         foreach (var c in Path.GetInvalidFileNameChars())
         {
             crudo = crudo.Replace(c, '_');
@@ -37,7 +38,7 @@ public sealed class EmlWriter
     /// </summary>
     public byte[]? Build(Peticion p)
     {
-        var destinatarios = _directory.EmailsFor(p.Comuna);
+        IReadOnlyList<string> destinatarios = _directory.EmailsFor(p.Comuna);
         if (destinatarios.Count == 0)
         {
             return null;
@@ -45,6 +46,25 @@ public sealed class EmlWriter
 
         var subject = EmailTemplate.Subject(p);
         var body = EmailTemplate.Body(p, _options.MailboxAddress);
+
+        // MODO PRUEBA: igual que el envio por EWS, el borrador tampoco puede quedar dirigido a la
+        // municipalidad. Se redirige a la casilla de prueba y se marca, para que un doble clic
+        // distraido en Outlook no le escriba de verdad a un municipio.
+        if (!string.IsNullOrWhiteSpace(_options.TestModeEmail))
+        {
+            var cabecera = new[]
+            {
+                "*** BORRADOR DE PRUEBA - NO VA A LA MUNICIPALIDAD ***",
+                $"Comuna destino real: {p.Comuna}",
+                $"Habria ido a: {string.Join(", ", destinatarios)}",
+                new string('-', 60),
+                string.Empty,
+                string.Empty,
+            };
+            body = string.Join("\n", cabecera) + body;
+            subject = $"[PRUEBA] {subject}";
+            destinatarios = new[] { _options.TestModeEmail!.Trim() };
+        }
 
         var sb = new StringBuilder();
         sb.Append("From: ").Append(_options.MailboxAddress).Append(Crlf);
