@@ -9,10 +9,19 @@ directorio oficial de comunas (`data/comunas.csv`, 513 comunas) y el transporte 
 
 ## Qué hace
 
-1. **Importar Excel** — lee el `.xlsx` de solicitudes, se queda con las filas cuya columna
-   *Trámite* dice `CAMBIO DE DOMICILIO` y extrae **Nombre completo, RUT, Comuna, Fecha de
-   solicitud** (y Clases si existe). RUT normalizado y validado con dígito verificador; los que
-   no validan se guardan igual, marcados para revisión.
+1. **Importar Excel** — lee el libro `DETALLE CARPETAS ... .xlsx` completo (todas las hojas de
+   agenda mensual: Av. Argentina, Placilla y Merc. Puerto de cada mes; ignora `PLANTILLA*`,
+   `HOJA ESTADISTICAS`, `CORREOS CAMBIO DE DOMICLIO`). Se queda con las filas cuya columna
+   **`ESTADO DE LA CARPETA` == `CAMBIO DE DOMICILIO`** y arma una petición por fila:
+   - **Nombre** ← `NOMBRE COMPLETO`
+   - **RUT** ← `RUT` (normalizado y validado con dígito verificador; los inválidos se guardan marcados)
+   - **Comuna de origen** ← `FECHA ULTIMA CARPETA` cuando trae texto de comuna en vez de fecha,
+     calzada contra el directorio con tolerancia a tipeos (distancia de edición ≤ 2). Si no calza,
+     la petición queda en estado *Sin correo de comuna* para revisión manual.
+   - **Fecha de solicitud** ← `FECHA DE LA CITACION`
+   La fila de encabezado se detecta sola (primera con "RUT"); el orden de columnas no importa.
+   El libro trae listas desplegables > 255 caracteres que ClosedXML rechaza: se lee una copia
+   temporal sin esos nodos (`Excel/WorkbookSanitizer.cs`), el original nunca se toca.
 2. **Deduplicar** — clave `RUT + Comuna`. Reimportar no duplica.
 3. **Enviar correo** — por cada petición busca el correo municipal de esa comuna en el directorio
    y manda, vía EWS (buzón `cambiodedomicilio@munivalpo.cl`), el texto fijo con la cita del
@@ -48,11 +57,29 @@ Los encabezados se buscan **sin distinguir mayúsculas ni tildes**; el orden de 
 el Excel no importa. Defaults en `appsettings.json`:
 `TRAMITE`, `NOMBRE COMPLETO`, `RUT`, `COMUNA`, `FECHA SOLICITUD`, `CLASES`.
 
+## Importación headless
+
+```powershell
+dotnet run -c Release -- --import "C:\...\DETALLE CARPETAS DEPTO. LICENCIAS DE CONDUCIR 2026.xlsx"
+```
+
+Corrida real contra el libro 2026 (02-09-2026):
+
+```
+Hojas leídas:          18
+Filas leídas:          22978
+Filas CAMBIO DE DOM.:  33
+Peticiones nuevas:     32
+Duplicadas (ya había): 1
+RUT inválidos:         0
+Comuna no reconocida:  2   (ALGORROBO, LLAYLLAY — no están en comunas.csv)
+```
+
 ## Pendiente
 
-- **Confirmar los encabezados reales del Excel** y ajustar `Peticion:Columns` — hoy son una
-  suposición. Pasá el archivo (o la foto que quedó pendiente) y se calzan.
-- Cargar `Peticion:Ews:Username` / `Password`.
+- Cargar `Peticion:Ews:Password` en `appsettings.Local.json`.
+- `data/comunas.csv` no trae Algarrobo ni Llay-Llay (ni otras). Agregar filas
+  `"COMUNA","correo@municipio.cl","dominio"` y reiniciar. Pantalla Comunas es solo lectura por ahora.
 - Pruebas automatizadas (proyecto de tests aún no creado).
 - Empaquetado `.exe` autocontenido + acceso directo, como en LicenciasCarpetas, si se quiere.
 
