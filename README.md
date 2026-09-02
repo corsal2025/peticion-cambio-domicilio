@@ -52,15 +52,16 @@ Abre `http://localhost:5020`.
 
 | Clave | Para qué |
 | --- | --- |
-| `Peticion:ExcelPath` | ruta absoluta al `.xlsx` de solicitudes |
-| `Peticion:ExcelSheetName` | hoja a leer (vacío = primera) |
+| `Peticion:ExcelPath` | ruta absoluta al libro `DETALLE CARPETAS ... .xlsx` |
+| `Peticion:TestModeEmail` | **modo prueba**: si tiene una dirección, todo se desvía ahí y nada llega a las municipalidades. Vacío = envío real |
 | `Peticion:Ews:Url` | `https://mail.munivalpo.cl/EWS/Exchange.asmx` |
 | `Peticion:Ews:Username` / `Password` | credenciales del buzón institucional |
-| `Peticion:Columns:*` | nombre de cada encabezado en tu Excel (ver abajo) |
+| `Peticion:EstadoCambioDomicilio` | valor que dispara (por defecto `CAMBIO DE DOMICILIO`) |
+| `Peticion:Columns:*` | nombre de cada encabezado en el libro |
 
 Los encabezados se buscan **sin distinguir mayúsculas ni tildes**; el orden de las columnas en
 el Excel no importa. Defaults en `appsettings.json`:
-`TRAMITE`, `NOMBRE COMPLETO`, `RUT`, `COMUNA`, `FECHA SOLICITUD`, `CLASES`.
+`ESTADO DE LA CARPETA`, `NOMBRE COMPLETO`, `RUT`, `FECHA ULTIMA CARPETA`, `FECHA DE LA CITACION`.
 
 ## Importación headless
 
@@ -80,13 +81,36 @@ RUT inválidos:         0
 Comuna no reconocida:  2   (ALGORROBO, LLAYLLAY — no están en comunas.csv)
 ```
 
+## Despliegue
+
+```powershell
+.\deploy\publish.ps1 -Shortcut
+```
+
+Publica un `.exe` autocontenido (no necesita el SDK) en `publish\` y crea el acceso directo
+**"Peticion Cambio Domicilio - Dashboard"** en el Escritorio. El `.exe` es `WinExe`: corre sin
+ventana de consola y no aparece en la barra de tareas.
+
+## Diagnóstico del correo
+
+```powershell
+dotnet run -c Release -- --test-ews
+```
+
+Muestra qué métodos de autenticación ofrece el servidor y hace **un solo** intento con las
+credenciales configuradas. No repetir a ciegas: cada fallo suma al bloqueo de la cuenta.
+
+Estado al 02-09-2026: el servidor responde y ofrece `Negotiate | NTLM | Basic`, pero devuelve
+**401 Unauthorized** con las credenciales actuales. Falta confirmar con sistemas el formato del
+usuario (`DOMINIO\usuario` en vez del correo), si Basic está habilitado para esa cuenta, y si
+la clave está vigente.
+
 ## Pendiente
 
-- Cargar `Peticion:Ews:Password` en `appsettings.Local.json`.
-- `data/comunas.csv` no trae Algarrobo ni Llay-Llay (ni otras). Agregar filas
-  `"COMUNA","correo@municipio.cl","dominio"` y reiniciar. Pantalla Comunas es solo lectura por ahora.
+- Credenciales EWS válidas (ver arriba).
+- Algarrobo y Llay-Llay no tienen correo ni en `comunas.csv` ni en la hoja `CORREOS` del libro:
+  agregarlas desde la pantalla **Comunas**.
 - Pruebas automatizadas (proyecto de tests aún no creado).
-- Empaquetado `.exe` autocontenido + acceso directo, como en LicenciasCarpetas, si se quiere.
 
 ## Estructura
 
