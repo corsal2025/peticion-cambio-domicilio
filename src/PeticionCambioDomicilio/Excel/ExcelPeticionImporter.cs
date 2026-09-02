@@ -39,33 +39,8 @@ public sealed class ExcelPeticionImporter
     public ImportResult Import(string excelPath, Func<Peticion, bool> addIfNew)
     {
         var avisos = new List<string>();
-
-        // El libro real trae listas desplegables > 255 chars que ClosedXML rechaza: se lee una
-        // copia temporal sin esos nodos. El original nunca se toca.
-        string? sanitizedPath = null;
-        XLWorkbook workbook;
-        try
-        {
-            workbook = new XLWorkbook(excelPath);
-        }
-        catch (ArgumentOutOfRangeException)
-        {
-            sanitizedPath = WorkbookSanitizer.CreateCopyWithoutDataValidations(excelPath);
-            workbook = new XLWorkbook(sanitizedPath);
-        }
-
-        try
-        {
-            return ImportCore(workbook, avisos, addIfNew);
-        }
-        finally
-        {
-            workbook.Dispose();
-            if (sanitizedPath is not null)
-            {
-                try { File.Delete(sanitizedPath); } catch { /* archivo temporal */ }
-            }
-        }
+        using var loaded = LoadedWorkbook.Open(excelPath);
+        return ImportCore(loaded.Workbook, avisos, addIfNew);
     }
 
     private ImportResult ImportCore(XLWorkbook workbook, List<string> avisos, Func<Peticion, bool> addIfNew)

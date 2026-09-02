@@ -30,7 +30,25 @@ builder.Services.AddRazorPages();
 
 var app = builder.Build();
 
-// Importación headless: dotnet run -- --import ["ruta.xlsx"]
+// Importar el directorio de comunas desde el libro: dotnet run -- --import-comunas ["ruta.xlsx"]
+if (args.Contains("--import-comunas"))
+{
+    var i = Array.IndexOf(args, "--import-comunas");
+    var path = i + 1 < args.Length && !args[i + 1].StartsWith("--") ? args[i + 1] : options.ExcelPath;
+    if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+    {
+        Console.Error.WriteLine($"Excel no encontrado: '{path}'.");
+        return;
+    }
+
+    var dir = app.Services.GetRequiredService<ComunaDirectory>();
+    var r = dir.ImportFromWorkbook(path);
+    Console.WriteLine($"Comunas leídas: {r.Leidos} · nuevas: {r.Nuevos} · ya estaban: {r.Actualizados} · total ahora: {dir.Count}");
+    foreach (var a in r.Avisos) Console.WriteLine($"  - {a}");
+    return;
+}
+
+// Importación de peticiones headless: dotnet run -- --import ["ruta.xlsx"]
 if (args.Contains("--import"))
 {
     var idx = Array.IndexOf(args, "--import");
