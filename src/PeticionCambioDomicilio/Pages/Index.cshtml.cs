@@ -104,6 +104,12 @@ public sealed class IndexModel : PageModel
         return RedirectToPage();
     }
 
+    public IActionResult OnPostMarcar(long id)
+    {
+        _repository.ToggleMarcada(id);
+        return RedirectToPage();
+    }
+
     public IActionResult OnPostEliminar(long id)
     {
         _repository.Delete(id);

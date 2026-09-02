@@ -33,12 +33,41 @@ public sealed class PeticionRepository
                 DetalleEstado     TEXT,
                 CreadaEn          TEXT NOT NULL,
                 EnviadaEn         TEXT,
-                DestinatariosCorreo TEXT
+                DestinatariosCorreo TEXT,
+                Oficina           TEXT,
+                OrdenImportacion  INTEGER NOT NULL DEFAULT 0,
+                Marcada           INTEGER NOT NULL DEFAULT 0
             );
             CREATE UNIQUE INDEX IF NOT EXISTS UX_Peticion_Rut_Comuna
                 ON Peticion (Rut, Comuna);
             """;
         cmd.ExecuteNonQuery();
+
+        // Bases creadas antes de estas columnas: agregarlas sin perder datos.
+        foreach (var (columna, definicion) in new[]
+                 {
+                     ("Oficina", "TEXT"),
+                     ("OrdenImportacion", "INTEGER NOT NULL DEFAULT 0"),
+                     ("Marcada", "INTEGER NOT NULL DEFAULT 0"),
+                 })
+        {
+            if (ColumnExists(cn, columna))
+            {
+                continue;
+            }
+
+            using var alter = cn.CreateCommand();
+            alter.CommandText = $"ALTER TABLE Peticion ADD COLUMN {columna} {definicion};";
+            alter.ExecuteNonQuery();
+        }
+    }
+
+    private static bool ColumnExists(SqliteConnection cn, string column)
+    {
+        using var cmd = cn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('Peticion') WHERE name = $name;";
+        cmd.Parameters.AddWithValue("$name", column);
+        return Convert.ToInt64(cmd.ExecuteScalar()) > 0;
     }
 
     private SqliteConnection Open()
@@ -55,9 +84,11 @@ public sealed class PeticionRepository
         using var cmd = cn.CreateCommand();
         cmd.CommandText = """
             INSERT OR IGNORE INTO Peticion
-                (NombreCompleto, Rut, Comuna, Clases, FechaSolicitud, Origen, RutInvalido, Estado, CreadaEn)
+                (NombreCompleto, Rut, Comuna, Clases, FechaSolicitud, Origen, Oficina,
+                 OrdenImportacion, RutInvalido, Estado, CreadaEn)
             VALUES
-                ($nombre, $rut, $comuna, $clases, $fecha, $origen, $rutInvalido, $estado, $creada);
+                ($nombre, $rut, $comuna, $clases, $fecha, $origen, $oficina,
+                 $orden, $rutInvalido, $estado, $creada);
             """;
         cmd.Parameters.AddWithValue("$nombre", p.NombreCompleto);
         cmd.Parameters.AddWithValue("$rut", p.Rut);
@@ -65,6 +96,8 @@ public sealed class PeticionRepository
         cmd.Parameters.AddWithValue("$clases", (object?)p.Clases ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$fecha", (object?)p.FechaSolicitud?.ToString("yyyy-MM-dd") ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$origen", (object?)p.Origen ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$oficina", (object?)p.Oficina ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$orden", p.OrdenImportacion);
         cmd.Parameters.AddWithValue("$rutInvalido", p.RutInvalido ? 1 : 0);
         cmd.Parameters.AddWithValue("$estado", (int)p.Estado);
         cmd.Parameters.AddWithValue("$creada", p.CreadaEn.ToString("o"));
@@ -75,7 +108,7 @@ public sealed class PeticionRepository
     {
         using var cn = Open();
         using var cmd = cn.CreateCommand();
-        cmd.CommandText = "SELECT * FROM Peticion ORDER BY Estado ASC, CreadaEn DESC;";
+        cmd.CommandText = "SELECT * FROM Peticion ORDER BY OrdenImportacion ASC, Id ASC;";
         using var reader = cmd.ExecuteReader();
         var result = new List<Peticion>();
         while (reader.Read())
@@ -116,6 +149,20 @@ public sealed class PeticionRepository
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Invierte la marca personal de una fila. Devuelve el valor que quedo.</summary>
+    public bool ToggleMarcada(long id)
+    {
+        using var cn = Open();
+        using var cmd = cn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE Peticion SET Marcada = CASE Marcada WHEN 1 THEN 0 ELSE 1 END WHERE Id = $id;
+            SELECT Marcada FROM Peticion WHERE Id = $id;
+            """;
+        cmd.Parameters.AddWithValue("$id", id);
+        var result = cmd.ExecuteScalar();
+        return result is not null && Convert.ToInt64(result) == 1;
+    }
+
     public void Delete(long id)
     {
         using var cn = Open();
@@ -136,6 +183,9 @@ public sealed class PeticionRepository
             ? null
             : DateOnly.Parse(r.GetString(r.GetOrdinal("FechaSolicitud"))),
         Origen = r.IsDBNull(r.GetOrdinal("Origen")) ? null : r.GetString(r.GetOrdinal("Origen")),
+        Oficina = r.IsDBNull(r.GetOrdinal("Oficina")) ? null : r.GetString(r.GetOrdinal("Oficina")),
+        OrdenImportacion = r.GetInt64(r.GetOrdinal("OrdenImportacion")),
+        Marcada = r.GetInt32(r.GetOrdinal("Marcada")) == 1,
         RutInvalido = r.GetInt32(r.GetOrdinal("RutInvalido")) == 1,
         Estado = (EstadoPeticion)r.GetInt32(r.GetOrdinal("Estado")),
         DetalleEstado = r.IsDBNull(r.GetOrdinal("DetalleEstado")) ? null : r.GetString(r.GetOrdinal("DetalleEstado")),

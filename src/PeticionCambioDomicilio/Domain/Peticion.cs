@@ -21,8 +21,20 @@ public sealed class Peticion
     public string? Clases { get; set; }
     public DateOnly? FechaSolicitud { get; set; }
 
-    /// <summary>Hoja + fila del Excel de origen, para trazabilidad.</summary>
+    /// <summary>Oficina de la que salio la fila: AV. ARGENTINA, PLACILLA o MERC. PUERTO.
+    /// Es lo unico que se muestra en la columna Origen; el detalle de hoja y fila va aparte.</summary>
+    public string? Oficina { get; set; }
+
+    /// <summary>Hoja + fila del Excel de origen, para trazabilidad (no se muestra en la tabla).</summary>
     public string? Origen { get; set; }
+
+    /// <summary>Posicion en el libro: hojas en el orden en que aparecen y filas de arriba abajo.
+    /// La lista se ordena por esto, para que las peticiones queden en el mismo orden del Excel
+    /// y no dispersas.</summary>
+    public long OrdenImportacion { get; set; }
+
+    /// <summary>Marca personal del operador (columna Marcar del dashboard).</summary>
+    public bool Marcada { get; set; }
 
     /// <summary>Se llena si el RUT del Excel no valida — la fila igual se guarda para revisión manual.</summary>
     public bool RutInvalido { get; set; }

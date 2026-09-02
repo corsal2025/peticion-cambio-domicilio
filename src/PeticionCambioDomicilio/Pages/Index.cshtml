@@ -48,6 +48,7 @@
 <table class="table table-sm table-hover mt-3 align-middle">
     <thead>
         <tr>
+            <th style="width:1%">Marcar</th>
             <th>Nombre</th>
             <th>RUT</th>
             <th>Comuna</th>
@@ -60,7 +61,14 @@
     <tbody>
     @foreach (var p in Model.Peticiones)
     {
-        <tr class="@(p.RutInvalido ? "table-warning" : "")">
+        <tr class="@(p.Marcada ? "table-info" : p.RutInvalido ? "table-warning" : "")">
+            <td class="text-center">
+                <form method="post" class="d-inline">
+                    <input type="hidden" name="id" value="@p.Id" />
+                    <button asp-page-handler="Marcar" class="btn btn-sm btn-link p-0 fs-5 text-decoration-none"
+                            title="Marcar / desmarcar">@(p.Marcada ? "☑" : "☐")</button>
+                </form>
+            </td>
             <td>@p.NombreCompleto</td>
             <td>@p.Rut @(p.RutInvalido ? "⚠" : "")</td>
             <td>@p.Comuna</td>
@@ -85,7 +93,7 @@
                     <div class="small text-muted">@p.EnviadaEn.Value.ToString("dd-MM-yyyy HH:mm") → @p.DestinatariosCorreo</div>
                 }
             </td>
-            <td class="small text-muted">@p.Origen</td>
+            <td>@p.Oficina</td>
             <td class="text-nowrap">
                 <form method="post" class="d-inline">
                     <input type="hidden" name="id" value="@p.Id" />
@@ -101,7 +109,7 @@
     }
     @if (Model.Peticiones.Count == 0)
     {
-        <tr><td colspan="7" class="text-center text-muted py-4">Sin peticiones. Importá desde el Excel.</td></tr>
+        <tr><td colspan="8" class="text-center text-muted py-4">Sin peticiones. Importá desde el Excel.</td></tr>
     }
     </tbody>
 </table>

@@ -50,6 +50,7 @@ public sealed class ExcelPeticionImporter
         var ignoradas = _options.HojasIgnoradas.Select(TextNormalization.Fold).ToArray();
 
         int hojas = 0, filas = 0, cd = 0, nuevas = 0, dup = 0, rutInv = 0, comunaNo = 0;
+        long orden = 0; // posicion global: hojas en el orden del libro, filas de arriba abajo
 
         foreach (var sheet in workbook.Worksheets)
         {
@@ -90,6 +91,7 @@ public sealed class ExcelPeticionImporter
             }
 
             hojas++;
+            var oficina = OficinaDeHoja(sheet.Name);
 
             foreach (var row in used.Rows())
             {
@@ -104,6 +106,7 @@ public sealed class ExcelPeticionImporter
                 }
 
                 filas++;
+                orden++;
 
                 var estado = TextNormalization.Fold(row.Cell(cEstado.Value).GetString());
                 if (estado != ordenObjetivo)
@@ -142,6 +145,8 @@ public sealed class ExcelPeticionImporter
                     Clases = string.IsNullOrWhiteSpace(clases) ? null : clases,
                     FechaSolicitud = fecha,
                     Origen = $"{sheet.Name}!fila {row.RowNumber()}",
+                    Oficina = oficina,
+                    OrdenImportacion = orden,
                     RutInvalido = rutInvalido,
                     Estado = comunaCanonica is null ? EstadoPeticion.SinCorreoComuna : EstadoPeticion.Borrador,
                     DetalleEstado = comunaCanonica is null ? $"Comuna del Excel: \"{comunaRaw}\"" : null,
@@ -159,6 +164,19 @@ public sealed class ExcelPeticionImporter
         }
 
         return new ImportResult(hojas, filas, cd, nuevas, dup, rutInv, comunaNo, avisos);
+    }
+
+    /// <summary>
+    /// De "2DO SEM. AV. ARGENTINA" o "ENERO PLACILLA" saca solo la oficina. Son tres y solo tres:
+    /// AV. ARGENTINA, PLACILLA y MERC. PUERTO. Es lo unico que se muestra en la columna Origen.
+    /// </summary>
+    private static string OficinaDeHoja(string sheetName)
+    {
+        var folded = TextNormalization.Fold(sheetName);
+        if (folded.Contains("argentina")) return "AV. ARGENTINA";
+        if (folded.Contains("placilla")) return "PLACILLA";
+        if (folded.Contains("merc") || folded.Contains("puerto")) return "MERC. PUERTO";
+        return sheetName.Trim().ToUpperInvariant();
     }
 
     private static (int? RowNumber, Dictionary<string, int> Headers) FindHeaderRow(IXLRange used)

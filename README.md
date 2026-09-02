@@ -27,6 +27,11 @@ directorio oficial de comunas (`data/comunas.csv`, 513 comunas) y el transporte 
    y manda, vía EWS (buzón `cambiodedomicilio@munivalpo.cl`), el texto fijo con la cita del
    art. 14 del Decreto 170 y Plataforma SGL. Nombre y RUT son lo único que cambia.
 4. **Estado por petición** — Borrador / Enviada / Sin correo de comuna / Error, con reintento.
+5. **Columna Marcar** — casilla por fila para el seguimiento del operador. La fila marcada se pinta.
+6. **Orden del Excel** — la lista respeta el orden del libro (hojas en su orden, filas de arriba
+   abajo), no se dispersa por estado ni por fecha de importación.
+7. **Columna Origen** — muestra solo la oficina: `AV. ARGENTINA`, `PLACILLA` o `MERC. PUERTO`.
+   El detalle de hoja y fila queda guardado para trazabilidad, pero no ensucia la tabla.
 
 ## Stack
 
