@@ -91,4 +91,22 @@ app.UseStaticFiles();
 app.UseRouting();
 app.MapRazorPages();
 
+// Doble clic en el acceso directo: abre la pestaña sola una vez que Kestrel ya escucha.
+if (args.Contains("--open-browser"))
+{
+    var url = app.Configuration["Kestrel:Endpoints:Http:Url"] ?? "http://localhost:5020";
+    _ = Task.Run(async () =>
+    {
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"No se pudo abrir el navegador ({url}): {ex.Message}");
+        }
+    });
+}
+
 app.Run();
