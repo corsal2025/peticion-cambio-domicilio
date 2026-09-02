@@ -61,6 +61,22 @@ public sealed class ColumnMap
 public sealed class EwsOptions
 {
     public string? Url { get; set; }
+
+    /// <summary>
+    /// Usuario con el que autenticarse. Exchange on-premises con Basic suele querer
+    /// DOMINIO\usuario o el UPN, no siempre la direccion de correo.
+    /// Si el buzon del departamento es COMPARTIDO no tiene clave propia: hay que poner aca el
+    /// usuario personal de dominio (el que tiene permiso Send As) y usar SendAsAddress.
+    /// </summary>
     public string? Username { get; set; }
+
     public string? Password { get; set; }
+
+    /// <summary>
+    /// Direccion desde la que sale el correo, cuando es distinta de la cuenta autenticada.
+    /// Caso tipico: te autenticas con tu usuario y envias como el buzon compartido
+    /// cambiodedomicilio@munivalpo.cl. Requiere permiso "Send As" sobre ese buzon.
+    /// Vacio = sale como la cuenta autenticada.
+    /// </summary>
+    public string? SendAsAddress { get; set; }
 }

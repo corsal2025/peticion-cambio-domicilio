@@ -18,6 +18,11 @@
             @if (Model.MailListo)
             {
                 <span class="badge bg-success">Configurado</span> <text>@Model.Options.Ews?.Url</text>
+                <div class="small text-muted">Usuario: <code>@Model.Options.Ews?.Username</code></div>
+                @if (!string.IsNullOrWhiteSpace(Model.Options.Ews?.SendAsAddress))
+                {
+                    <div class="small text-muted">Envia como: <code>@Model.Options.Ews?.SendAsAddress</code> (requiere permiso Send As)</div>
+                }
             }
             else
             {

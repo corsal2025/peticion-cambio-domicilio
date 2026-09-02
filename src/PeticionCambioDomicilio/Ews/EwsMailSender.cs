@@ -25,11 +25,13 @@ public sealed class EwsMailSender : IMailSender, IDisposable
     private static readonly int[] TransientStatusCodes = [408, 429, 500, 502, 503, 504];
 
     private readonly EwsOptions? _ews;
+    private readonly string? _sendAs;
     private readonly HttpClient? _http;
 
     public EwsMailSender(AppOptions options)
     {
         _ews = options.Ews;
+        _sendAs = string.IsNullOrWhiteSpace(options.Ews?.SendAsAddress) ? null : options.Ews!.SendAsAddress!.Trim();
         if (_ews is { Url: not null, Username: not null, Password: not null })
         {
             _http = new HttpClient { Timeout = TimeSpan.FromSeconds(100) };
@@ -49,7 +51,7 @@ public sealed class EwsMailSender : IMailSender, IDisposable
                 "Falta configurar Peticion:Ews (Url/Username/Password) en appsettings.Local.json.");
         }
 
-        var soap = BuildSendMailRequest(toAddress, subject, body);
+        var soap = BuildSendMailRequest(toAddress, subject, body, _sendAs);
         var response = await PostAsync(_ews.Url, soap, cancellationToken);
         EnsureSuccess(response);
     }
@@ -100,7 +102,7 @@ public sealed class EwsMailSender : IMailSender, IDisposable
         }
     }
 
-    private static string BuildSendMailRequest(string toAddress, string subject, string body)
+    private static string BuildSendMailRequest(string toAddress, string subject, string body, string? sendAsAddress)
     {
         var envelope = new XElement(Soap + "Envelope",
             new XAttribute(XNamespace.Xmlns + "soap", Soap),
@@ -119,7 +121,14 @@ public sealed class EwsMailSender : IMailSender, IDisposable
                             new XElement(T + "Body", new XAttribute("BodyType", "Text"), body),
                             new XElement(T + "ToRecipients",
                                 new XElement(T + "Mailbox",
-                                    new XElement(T + "EmailAddress", toAddress))))))));
+                                    new XElement(T + "EmailAddress", toAddress))),
+                            // From solo cuando se envia como otro buzon (requiere permiso Send As).
+                            // El orden importa: EWS exige ToRecipients antes que From.
+                            sendAsAddress is null
+                                ? null
+                                : new XElement(T + "From",
+                                    new XElement(T + "Mailbox",
+                                        new XElement(T + "EmailAddress", sendAsAddress))))))));
 
         return new XDocument(new XDeclaration("1.0", "utf-8", null), envelope)
             .ToString(SaveOptions.DisableFormatting);
