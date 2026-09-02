@@ -44,6 +44,12 @@
 <form method="post" class="d-inline" onsubmit="return confirm('¿Enviar correo a todas las comunas de las peticiones pendientes?');">
     <button asp-page-handler="EnviarTodas" class="btn btn-outline-primary">Enviar todas las pendientes</button>
 </form>
+<form method="post" class="d-inline">
+    <button asp-page-handler="BorradoresTodos" class="btn btn-outline-secondary"
+            title="Genera un .eml por peticion en una carpeta del Escritorio. Doble clic y Outlook lo abre listo para enviar.">
+        Generar borradores para Outlook
+    </button>
+</form>
 
 <table class="table table-sm table-hover mt-3 align-middle">
     <thead>
@@ -99,6 +105,11 @@
                     <input type="hidden" name="id" value="@p.Id" />
                     <button asp-page-handler="Enviar" class="btn btn-sm btn-outline-primary"
                             disabled="@(p.Estado == EstadoPeticion.Enviada ? "disabled" : null)">Enviar</button>
+                </form>
+                <form method="post" class="d-inline">
+                    <input type="hidden" name="id" value="@p.Id" />
+                    <button asp-page-handler="Borrador" class="btn btn-sm btn-outline-secondary"
+                            title="Descargar .eml y abrirlo en Outlook">Borrador</button>
                 </form>
                 <form method="post" class="d-inline" onsubmit="return confirm('¿Eliminar esta petición?');">
                     <input type="hidden" name="id" value="@p.Id" />

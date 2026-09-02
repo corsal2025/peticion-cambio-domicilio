@@ -17,6 +17,7 @@ public sealed class IndexModel : PageModel
     private readonly ComunaDirectory _directory;
     private readonly IMailSender _mail;
     private readonly AppOptions _options;
+    private readonly EmlWriter _eml;
 
     public IndexModel(
         PeticionRepository repository,
@@ -24,7 +25,8 @@ public sealed class IndexModel : PageModel
         PeticionSender sender,
         ComunaDirectory directory,
         IMailSender mail,
-        AppOptions options)
+        AppOptions options,
+        EmlWriter eml)
     {
         _repository = repository;
         _importer = importer;
@@ -32,6 +34,7 @@ public sealed class IndexModel : PageModel
         _directory = directory;
         _mail = mail;
         _options = options;
+        _eml = eml;
     }
 
     public IReadOnlyList<Peticion> Peticiones { get; private set; } = Array.Empty<Peticion>();
@@ -101,6 +104,58 @@ public sealed class IndexModel : PageModel
         }
 
         TempData["Flash"] = $"Enviadas: {ok} · Con problema: {fail}.";
+        return RedirectToPage();
+    }
+
+    /// <summary>Descarga el correo como .eml: doble clic y Outlook lo abre listo para enviar.
+    /// No usa EWS ni credenciales.</summary>
+    public IActionResult OnPostBorrador(long id)
+    {
+        var p = _repository.Get(id);
+        if (p is null)
+        {
+            TempData["Flash"] = "La peticion ya no existe.";
+            return RedirectToPage();
+        }
+
+        var bytes = _eml.Build(p);
+        if (bytes is null)
+        {
+            TempData["Flash"] = $"No hay correo registrado para la comuna \"{p.Comuna}\". Agregalo en Comunas.";
+            return RedirectToPage();
+        }
+
+        return File(bytes, "message/rfc822", EmlWriter.FileNameFor(p));
+    }
+
+    /// <summary>Genera un .eml por cada peticion pendiente en una carpeta del Escritorio.</summary>
+    public IActionResult OnPostBorradoresTodos()
+    {
+        var pendientes = _repository.All()
+            .Where(p => p.Estado != EstadoPeticion.Enviada)
+            .ToList();
+
+        var carpeta = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+            "Correos cambio de domicilio " + DateTime.Now.ToString("yyyy-MM-dd"));
+        Directory.CreateDirectory(carpeta);
+
+        int escritos = 0, sinCorreo = 0;
+        foreach (var p in pendientes)
+        {
+            var bytes = _eml.Build(p);
+            if (bytes is null)
+            {
+                sinCorreo++;
+                continue;
+            }
+
+            System.IO.File.WriteAllBytes(Path.Combine(carpeta, EmlWriter.FileNameFor(p)), bytes);
+            escritos++;
+        }
+
+        TempData["Flash"] = $"{escritos} borrador(es) en: {carpeta}"
+            + (sinCorreo > 0 ? $" - {sinCorreo} sin correo de comuna, revisar en Comunas." : "");
         return RedirectToPage();
     }
 
