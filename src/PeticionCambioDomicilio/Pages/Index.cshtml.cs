@@ -128,36 +128,6 @@ public sealed class IndexModel : PageModel
         return File(bytes, "message/rfc822", _eml.FileNameFor(p));
     }
 
-    /// <summary>Genera un .eml por cada peticion pendiente en una carpeta del Escritorio.</summary>
-    public IActionResult OnPostBorradoresTodos()
-    {
-        var pendientes = _repository.All()
-            .Where(p => p.Estado != EstadoPeticion.Enviada)
-            .ToList();
-
-        var carpeta = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-            "Correos cambio de domicilio " + DateTime.Now.ToString("yyyy-MM-dd"));
-        Directory.CreateDirectory(carpeta);
-
-        int escritos = 0, sinCorreo = 0;
-        foreach (var p in pendientes)
-        {
-            var bytes = _eml.Build(p);
-            if (bytes is null)
-            {
-                sinCorreo++;
-                continue;
-            }
-
-            System.IO.File.WriteAllBytes(Path.Combine(carpeta, _eml.FileNameFor(p)), bytes);
-            escritos++;
-        }
-
-        TempData["Flash"] = $"{escritos} borrador(es) en: {carpeta}"
-            + (sinCorreo > 0 ? $" - {sinCorreo} sin correo de comuna, revisar en Comunas." : "");
-        return RedirectToPage();
-    }
 
     public IActionResult OnPostMarcar(long id)
     {

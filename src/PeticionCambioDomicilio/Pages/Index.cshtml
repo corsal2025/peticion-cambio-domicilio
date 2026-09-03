@@ -44,12 +44,6 @@
 <form method="post" class="d-inline" onsubmit="return confirm('¿Enviar correo a todas las comunas de las peticiones pendientes?');">
     <button asp-page-handler="EnviarTodas" class="btn btn-outline-primary">Enviar todas las pendientes</button>
 </form>
-<form method="post" class="d-inline">
-    <button asp-page-handler="BorradoresTodos" class="btn btn-outline-secondary"
-            title="Genera un .eml por peticion en una carpeta del Escritorio. Doble clic y Outlook lo abre listo para enviar.">
-        Generar borradores para Outlook
-    </button>
-</form>
 <form method="post" class="d-inline float-end" onsubmit="return confirm('¿BORRAR las @Model.Peticiones.Count peticiones cargadas? El Excel NO se toca: podés reimportar cuando quieras. Esto solo limpia la lista del dashboard.');">
     <button asp-page-handler="BorrarTodo" class="btn btn-outline-danger" disabled="@(Model.Peticiones.Count == 0 ? "disabled" : null)">
         Borrar todos los datos
