@@ -4,8 +4,7 @@
 
 .DESCRIPTION
     Doble clic: si la app no esta corriendo la arranca (sin ventana de consola) y abre
-    la pestana; si ya corre, solo abre otra pestana. Arrancarla dos veces dejaria dos
-    procesos peleando por el mismo puerto.
+    la pestana; si ya corre, solo abre otra pestana.
 #>
 
 param(
@@ -21,15 +20,16 @@ if (-not (Test-Path $exePath)) {
 }
 
 $launcherPath = Join-Path $PublishPath "abrir-dashboard.ps1"
-$launcherContent = @"
-`$running = Get-Process -Name "PeticionCambioDomicilio" -ErrorAction SilentlyContinue
-if (-not `$running) {
-    Start-Process -FilePath "$exePath" -ArgumentList "--open-browser" -WorkingDirectory "$PublishPath" -WindowStyle Hidden
+$launcher = @"
+`$exe = Join-Path `$PSScriptRoot 'PeticionCambioDomicilio.exe'
+`$corriendo = Get-Process -Name 'PeticionCambioDomicilio' -ErrorAction SilentlyContinue
+if (-not `$corriendo) {
+    Start-Process -FilePath `$exe -ArgumentList '--open-browser' -WorkingDirectory `$PSScriptRoot -WindowStyle Hidden
 } else {
-    Start-Process "$DashboardUrl"
+    Start-Process '$DashboardUrl'
 }
 "@
-Set-Content -Path $launcherPath -Value $launcherContent -Encoding UTF8
+Set-Content -Path $launcherPath -Value $launcher -Encoding UTF8
 
 $desktopPath = [Environment]::GetFolderPath("Desktop")
 $shortcutPath = Join-Path $desktopPath "Peticion Cambio Domicilio - Dashboard.lnk"
@@ -44,4 +44,3 @@ $shortcut.IconLocation = "$exePath,0"
 $shortcut.Save()
 
 Write-Host "Acceso directo creado en: $shortcutPath" -ForegroundColor Green
-Write-Host "Doble clic: arranca la app si no corre y abre $DashboardUrl"
