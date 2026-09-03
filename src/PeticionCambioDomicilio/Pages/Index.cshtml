@@ -38,30 +38,34 @@
     </div>
 </div>
 
-<form method="post" class="d-inline">
-    <button asp-page-handler="Importar" class="btn btn-primary">Importar / actualizar desde Excel</button>
-</form>
-<form method="post" class="d-inline" onsubmit="return confirm('¿Enviar correo a todas las comunas de las peticiones pendientes?');">
-    <button asp-page-handler="EnviarTodas" class="btn btn-outline-primary">Enviar todas las pendientes</button>
-</form>
-<form method="post" class="d-inline float-end" onsubmit="return confirm('¿BORRAR las @Model.Peticiones.Count peticiones cargadas? El Excel NO se toca: podés reimportar cuando quieras. Esto solo limpia la lista del dashboard.');">
-    <button asp-page-handler="BorrarTodo" class="btn btn-outline-danger" disabled="@(Model.Peticiones.Count == 0 ? "disabled" : null)">
-        Borrar todos los datos
-    </button>
-</form>
+<div class="toolbar d-flex flex-wrap align-items-center gap-2 mb-2">
+    <form method="post">
+        <button asp-page-handler="Importar" class="btn btn-sm btn-primary">Importar / actualizar desde Excel</button>
+    </form>
+    <form method="post" onsubmit="return confirm('¿Enviar correo a todas las comunas de las peticiones pendientes?');">
+        <button asp-page-handler="EnviarTodas" class="btn btn-sm btn-outline-primary">Enviar todas las pendientes</button>
+    </form>
+    <span class="text-muted small ms-1">@Model.Peticiones.Count peticiones</span>
+    <form method="post" class="ms-auto" onsubmit="return confirm('¿BORRAR las @Model.Peticiones.Count peticiones cargadas? El Excel NO se toca: podés reimportar cuando quieras. Esto solo limpia la lista del dashboard.');">
+        <button asp-page-handler="BorrarTodo" class="btn btn-sm btn-outline-danger" disabled="@(Model.Peticiones.Count == 0 ? "disabled" : null)">
+            Borrar todos los datos
+        </button>
+    </form>
+</div>
 
-<table class="table table-sm table-hover mt-3 align-middle">
+<div class="table-responsive">
+<table class="table table-hover align-middle mb-0">
     <thead>
         <tr>
-            <th style="width:1%">Marcar</th>
+            <th style="width:32px" class="text-center">✓</th>
             <th>Nombre</th>
-            <th>RUT</th>
-            <th>Comuna</th>
-            <th>Fecha solicitud</th>
-            <th>Estado</th>
-            <th>Plazo (15 días hábiles)</th>
-            <th>Origen</th>
-            <th></th>
+            <th style="width:110px">RUT</th>
+            <th style="width:130px">Comuna</th>
+            <th style="width:92px">F. solicitud</th>
+            <th style="width:150px">Estado</th>
+            <th style="width:150px">Plazo · 15 d. hábiles</th>
+            <th style="width:110px">Origen</th>
+            <th style="width:1%"></th>
         </tr>
     </thead>
     <tbody>
@@ -76,9 +80,9 @@
                 </form>
             </td>
             <td>@p.NombreCompleto</td>
-            <td>@p.Rut @(p.RutInvalido ? "⚠" : "")</td>
+            <td class="col-rut">@p.Rut @(p.RutInvalido ? "⚠" : "")</td>
             <td>@p.Comuna</td>
-            <td>@(p.FechaSolicitud?.ToString("dd-MM-yyyy") ?? "—")</td>
+            <td class="col-fecha">@(p.FechaSolicitud?.ToString("dd-MM-yyyy") ?? "—")</td>
             <td>
                 @{
                     var badge = p.Estado switch
@@ -128,7 +132,7 @@
                 }
             </td>
             <td title="@p.Origen" style="cursor:help">@p.Oficina</td>
-            <td class="text-nowrap">
+            <td class="col-acciones">
                 <form method="post" class="d-inline">
                     <input type="hidden" name="id" value="@p.Id" />
                     <button asp-page-handler="Enviar" class="btn btn-sm btn-outline-primary"
@@ -152,6 +156,7 @@
     }
     </tbody>
 </table>
+</div>
 
 @section Scripts {
 <script>
