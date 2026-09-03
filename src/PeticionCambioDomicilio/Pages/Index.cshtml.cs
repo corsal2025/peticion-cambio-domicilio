@@ -56,11 +56,15 @@ public sealed class IndexModel : PageModel
 
         try
         {
-            var result = _importer.Import(_options.ExcelPath!, _repository.AddIfNew);
+            var result = _importer.Import(
+                _options.ExcelPath!,
+                _repository.AddIfNew,
+                _repository.All(),
+                _repository.Delete);
             var msg = $"Hojas: {result.HojasLeidas} · Filas: {result.FilasLeidas} · " +
                       $"Cambio de domicilio: {result.FilasCambioDomicilio} · Nuevas: {result.Nuevas} · " +
-                      $"Duplicadas: {result.Duplicadas} · RUT inválidos: {result.RutInvalidos} · " +
-                      $"Comuna no reconocida: {result.ComunaNoReconocida}";
+                      $"Actualizadas: {result.Duplicadas} · Quitadas (ya no están en el Excel): {result.Obsoletas} · " +
+                      $"RUT inválidos: {result.RutInvalidos} · Comuna no reconocida: {result.ComunaNoReconocida}";
             if (result.Avisos.Count > 0)
             {
                 msg += $" · Avisos ({result.Avisos.Count}): " + string.Join(" | ", result.Avisos.Take(8));

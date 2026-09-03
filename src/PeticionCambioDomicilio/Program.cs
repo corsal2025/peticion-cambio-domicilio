@@ -172,7 +172,7 @@ if (args.Contains("--import"))
 
     var repo = app.Services.GetRequiredService<PeticionRepository>();
     var importer = app.Services.GetRequiredService<ExcelPeticionImporter>();
-    var r = importer.Import(path, repo.AddIfNew);
+    var r = importer.Import(path, repo.AddIfNew, repo.All(), repo.Delete);
     Console.WriteLine($"Hojas leídas:          {r.HojasLeidas}");
     Console.WriteLine($"Filas leídas:          {r.FilasLeidas}");
     Console.WriteLine($"Filas CAMBIO DE DOM.:  {r.FilasCambioDomicilio}");
@@ -180,6 +180,7 @@ if (args.Contains("--import"))
     Console.WriteLine($"Duplicadas (ya había): {r.Duplicadas}");
     Console.WriteLine($"RUT inválidos:         {r.RutInvalidos}");
     Console.WriteLine($"Comuna no reconocida:  {r.ComunaNoReconocida}");
+    Console.WriteLine($"Quitadas (ya no estan): {r.Obsoletas}");
     foreach (var aviso in r.Avisos.Take(40))
     {
         Console.WriteLine($"  - {aviso}");

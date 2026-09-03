@@ -12,6 +12,7 @@ public sealed record ImportResult(
     int Duplicadas,
     int RutInvalidos,
     int ComunaNoReconocida,
+    int Obsoletas,
     IReadOnlyList<string> Avisos);
 
 /// <summary>
@@ -36,15 +37,25 @@ public sealed class ExcelPeticionImporter
         _directory = directory;
     }
 
-    public ImportResult Import(string excelPath, Func<Peticion, bool> addIfNew)
+    public ImportResult Import(
+        string excelPath,
+        Func<Peticion, bool> addIfNew,
+        IReadOnlyList<Peticion>? existentes = null,
+        Action<long>? borrar = null)
     {
         var avisos = new List<string>();
         using var loaded = LoadedWorkbook.Open(excelPath);
-        return ImportCore(loaded.Workbook, avisos, addIfNew);
+        return ImportCore(loaded.Workbook, avisos, addIfNew, existentes, borrar);
     }
 
-    private ImportResult ImportCore(XLWorkbook workbook, List<string> avisos, Func<Peticion, bool> addIfNew)
+    private ImportResult ImportCore(
+        XLWorkbook workbook,
+        List<string> avisos,
+        Func<Peticion, bool> addIfNew,
+        IReadOnlyList<Peticion>? existentes,
+        Action<long>? borrar)
     {
+        var vistas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var ordenObjetivo = TextNormalization.Fold(_options.EstadoCambioDomicilio);
         var ignoradas = _options.HojasIgnoradas.Select(TextNormalization.Fold).ToArray();
@@ -152,6 +163,7 @@ public sealed class ExcelPeticionImporter
                     DetalleEstado = comunaCanonica is null ? $"Comuna del Excel: \"{comunaRaw}\"" : null,
                 };
 
+                vistas.Add(peticion.Rut + "|" + peticion.Comuna);
                 if (addIfNew(peticion))
                 {
                     nuevas++;
@@ -163,7 +175,21 @@ public sealed class ExcelPeticionImporter
             }
         }
 
-        return new ImportResult(hojas, filas, cd, nuevas, dup, rutInv, comunaNo, avisos);
+        var obsoletas = 0;
+        if (existentes is not null && borrar is not null)
+        {
+            foreach (var vieja in existentes)
+            {
+                var esBorradorLimpio = vieja.Estado == EstadoPeticion.Borrador && !vieja.Marcada;
+                if (esBorradorLimpio && !vistas.Contains(vieja.Rut + "|" + vieja.Comuna))
+                {
+                    borrar(vieja.Id);
+                    obsoletas++;
+                }
+            }
+        }
+
+        return new ImportResult(hojas, filas, cd, nuevas, dup, rutInv, comunaNo, obsoletas, avisos);
     }
 
     /// <summary>

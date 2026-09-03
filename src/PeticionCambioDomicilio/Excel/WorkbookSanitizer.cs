@@ -27,7 +27,7 @@ public static class WorkbookSanitizer
 
         try
         {
-            StripDataValidations(tempPath);
+            StripDataValidationsInPlace(tempPath);
             return tempPath;
         }
         catch
@@ -37,7 +37,8 @@ public static class WorkbookSanitizer
         }
     }
 
-    private static void StripDataValidations(string xlsxPath)
+    /// <summary>Quita los nodos dataValidation de un .xlsx ya existente (in situ).</summary>
+    public static void StripDataValidationsInPlace(string xlsxPath)
     {
         using var archive = ZipFile.Open(xlsxPath, ZipArchiveMode.Update);
 

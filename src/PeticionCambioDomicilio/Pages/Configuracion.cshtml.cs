@@ -124,7 +124,7 @@ public sealed class ConfiguracionModel : PageModel
             new("Excel de solicitudes",
                 ExcelExiste,
                 ExcelExiste
-                    ? System.IO.Path.GetFileName(_options.ExcelPath)
+                    ? $"{System.IO.Path.GetFileName(_options.ExcelPath)} — última modificación {System.IO.File.GetLastWriteTime(_options.ExcelPath!):dd-MM-yyyy HH:mm}"
                     : "No se encuentra el archivo. Revisar Peticion:ExcelPath."),
 
             new("Directorio de comunas",
