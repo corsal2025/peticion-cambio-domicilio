@@ -45,6 +45,8 @@
     <form method="post" onsubmit="return confirm('¿Enviar correo a todas las comunas de las peticiones pendientes?');">
         <button asp-page-handler="EnviarTodas" class="btn btn-sm btn-outline-primary">Enviar todas las pendientes</button>
     </form>
+    <a href="/Imprimir" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir lista</a>
+    <a href="/Imprimir?marcadas=true" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir marcadas</a>
     <span class="text-muted small ms-1">@Model.Peticiones.Count peticiones</span>
     <form method="post" class="ms-auto" onsubmit="return confirm('¿BORRAR las @Model.Peticiones.Count peticiones cargadas? El Excel NO se toca: podés reimportar cuando quieras. Esto solo limpia la lista del dashboard.');">
         <button asp-page-handler="BorrarTodo" class="btn btn-sm btn-outline-danger" disabled="@(Model.Peticiones.Count == 0 ? "disabled" : null)">
@@ -62,7 +64,7 @@
             <th style="width:110px">RUT</th>
             <th style="width:130px">Comuna</th>
             <th style="width:92px">F. solicitud</th>
-            <th style="width:120px">Envío</th>
+            <th style="width:130px">Envío</th>
             <th style="width:210px">Estado carpeta</th>
             <th style="width:140px">Plazo · 15 d. háb.</th>
             <th style="width:110px">Origen</th>
@@ -84,24 +86,27 @@
             <td class="col-rut">@p.Rut @(p.RutInvalido ? "⚠" : "")</td>
             <td>@p.Comuna</td>
             <td class="col-fecha">@(p.FechaSolicitud?.ToString("dd-MM-yyyy") ?? "—")</td>
-            <td>
-                @{
-                    var badge = p.Estado switch
-                    {
-                        EstadoPeticion.Enviada => "bg-success",
-                        EstadoPeticion.SinCorreoComuna => "bg-warning text-dark",
-                        EstadoPeticion.Error => "bg-danger",
-                        _ => "bg-secondary"
-                    };
+            <td class="col-fecha">
+                @if (p.Estado == EstadoPeticion.Enviada && p.EnviadaEn is not null)
+                {
+                    <strong>@p.EnviadaEn.Value.ToString("dd-MM-yyyy")</strong>
+                    <div class="small text-muted">@p.EnviadaEn.Value.ToString("HH:mm")</div>
                 }
-                <span class="badge @badge">@p.Estado</span>
+                else if (p.Estado == EstadoPeticion.SinCorreoComuna)
+                {
+                    <span class="badge bg-warning text-dark">Sin correo comuna</span>
+                }
+                else if (p.Estado == EstadoPeticion.Error)
+                {
+                    <span class="badge bg-danger">Error</span>
+                }
+                else
+                {
+                    <span class="text-muted">Sin enviar</span>
+                }
                 @if (!string.IsNullOrEmpty(p.DetalleEstado))
                 {
                     <div class="small text-muted">@p.DetalleEstado</div>
-                }
-                @if (p.Estado == EstadoPeticion.Enviada && p.EnviadaEn is not null)
-                {
-                    <div class="small text-muted">@p.EnviadaEn.Value.ToString("dd-MM-yyyy HH:mm") → @p.DestinatariosCorreo</div>
                 }
             </td>
             <td>
@@ -151,6 +156,7 @@
                     <button asp-page-handler="Enviar" class="btn btn-sm btn-outline-primary"
                             disabled="@(p.Estado == EstadoPeticion.Enviada ? "disabled" : null)">Enviar</button>
                 </form>
+                <a href="/Imprimir?id=@p.Id" target="_blank" class="btn btn-sm btn-outline-secondary" title="Imprimir esta persona">🖨</a>
                 <form method="post" class="d-inline" onsubmit="return confirm('¿Eliminar esta petición?');">
                     <input type="hidden" name="id" value="@p.Id" />
                     <button asp-page-handler="Eliminar" class="btn btn-sm btn-outline-danger">✕</button>

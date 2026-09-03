@@ -97,6 +97,13 @@ public sealed class PeticionSender
         var joined = string.Join(", ", realDestinatarios);
         var detalle = modoPrueba ? $"MODO PRUEBA — desviada desde {string.Join(", ", destinatarios)}" : null;
         _repository.UpdateEstado(p.Id, EstadoPeticion.Enviada, detalle, DateTimeOffset.Now, joined);
+
+        // Al enviar, la carpeta pasa de "CAMBIO DE DOMICILIO" a "... SOLICITADO" automaticamente.
+        // Si el operador ya la habia movido a otro estado, no se pisa.
+        if (p.EstadoCarpeta == EstadoCarpetaCatalog.CambioDeDomicilio)
+        {
+            _repository.SetEstadoCarpeta(p.Id, "CAMBIO DE DOMICILIO SOLICITADO");
+        }
         return new SendResult(EstadoPeticion.Enviada,
             modoPrueba
                 ? $"[PRUEBA] Enviada a {joined} (habría ido a {p.Comuna})."
