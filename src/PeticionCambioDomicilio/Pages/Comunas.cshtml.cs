@@ -44,6 +44,20 @@ public sealed class ComunasModel : PageModel
         return RedirectToPage();
     }
 
+    public IActionResult OnPostEditar(string comuna, string correoViejo, string correoNuevo)
+    {
+        var (_, m) = _directory.EditarCorreo(comuna ?? "", correoViejo ?? "", correoNuevo ?? "");
+        TempData["Flash"] = m;
+        return RedirectToPage(new { Q });
+    }
+
+    public IActionResult OnPostEliminar(string comuna, string correo)
+    {
+        var (_, m) = _directory.Eliminar(comuna ?? "", correo ?? "");
+        TempData["Flash"] = m;
+        return RedirectToPage(new { Q });
+    }
+
     public IActionResult OnPostImportarDesdeExcel()
     {
         if (!ExcelDisponible)

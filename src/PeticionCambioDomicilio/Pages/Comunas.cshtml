@@ -62,13 +62,31 @@
     </div>
 </form>
 
-<table class="table table-sm table-striped">
-    <thead><tr><th>Comuna</th><th>Correo</th><th>Dominio</th></tr></thead>
+<table class="table table-sm table-striped align-middle">
+    <thead><tr><th>Comuna</th><th style="width:45%">Correo</th><th>Dominio</th><th style="width:1%"></th></tr></thead>
     <tbody>
     @foreach (var c in Model.Contactos)
     {
-        <tr><td>@c.Comuna</td><td>@c.Email</td><td>@c.Domain</td></tr>
+        <tr>
+            <td>@c.Comuna</td>
+            <td>
+                <form method="post" class="d-flex gap-1">
+                    <input type="hidden" name="comuna" value="@c.Comuna" />
+                    <input type="hidden" name="correoViejo" value="@c.Email" />
+                    <input name="correoNuevo" type="email" value="@c.Email" class="form-control form-control-sm" />
+                    <button asp-page-handler="Editar" class="btn btn-sm btn-outline-primary" title="Guardar el correo">✔</button>
+                </form>
+            </td>
+            <td class="small text-muted">@c.Domain</td>
+            <td>
+                <form method="post" onsubmit="return confirm('¿Eliminar @c.Email de @c.Comuna?');">
+                    <input type="hidden" name="comuna" value="@c.Comuna" />
+                    <input type="hidden" name="correo" value="@c.Email" />
+                    <button asp-page-handler="Eliminar" class="btn btn-sm btn-outline-danger" title="Eliminar este correo">✕</button>
+                </form>
+            </td>
+        </tr>
     }
     </tbody>
 </table>
-<p class="text-muted small">@Model.Contactos.Count registros. Se guardan en <code>data/comunas.csv</code>.</p>
+<p class="text-muted small">@Model.Contactos.Count registros. Se guardan en <code>data/comunas.csv</code>. El dominio se recalcula solo del correo.</p>

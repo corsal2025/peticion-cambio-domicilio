@@ -130,6 +130,53 @@ public sealed class ComunaDirectory
         }
     }
 
+    /// <summary>Cambia el correo (y su dominio) de un contacto existente, identificado por
+    /// comuna + correo viejo. Persiste el CSV.</summary>
+    public (bool Ok, string Mensaje) EditarCorreo(string comuna, string correoViejo, string correoNuevo)
+    {
+        correoNuevo = correoNuevo.Trim();
+        if (!correoNuevo.Contains('@') || correoNuevo.Length < 5)
+        {
+            return (false, "Correo inválido.");
+        }
+
+        lock (_gate)
+        {
+            var idx = _contacts.FindIndex(c =>
+                string.Equals(c.Comuna, comuna, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(c.Email, correoViejo, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0)
+            {
+                return (false, "No se encontró ese contacto.");
+            }
+
+            var dominio = correoNuevo[(correoNuevo.IndexOf('@') + 1)..].Trim();
+            _contacts[idx] = _contacts[idx] with { Email = correoNuevo, Domain = dominio };
+            Persist();
+            RebuildIndex();
+            return (true, $"{_contacts[idx].Comuna}: correo actualizado a {correoNuevo}");
+        }
+    }
+
+    /// <summary>Elimina un contacto (comuna + correo). Persiste el CSV.</summary>
+    public (bool Ok, string Mensaje) Eliminar(string comuna, string correo)
+    {
+        lock (_gate)
+        {
+            var quitados = _contacts.RemoveAll(c =>
+                string.Equals(c.Comuna, comuna, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(c.Email, correo, StringComparison.OrdinalIgnoreCase));
+            if (quitados == 0)
+            {
+                return (false, "No se encontró ese contacto.");
+            }
+
+            Persist();
+            RebuildIndex();
+            return (true, $"{comuna}: eliminado {correo}");
+        }
+    }
+
     /// <summary>
     /// Importa el directorio desde la hoja del libro cuyo nombre contiene "correos cambio de dom"
     /// (columnas Municipio / Correo; el municipio viene con prefijo "MUNICIP/"). Upsert por
