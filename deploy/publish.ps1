@@ -10,10 +10,6 @@
     Ademas de publicar, crea el acceso directo en el Escritorio.
 #>
 
-param(
-    [switch]$Shortcut
-)
-
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path $PSScriptRoot -Parent
@@ -45,6 +41,5 @@ Write-Host ""
 Write-Host "Publicado en: $publishPath" -ForegroundColor Green
 Write-Host "Ejecutable:   $(Join-Path $publishPath 'PeticionCambioDomicilio.exe')"
 
-if ($Shortcut) {
-    & (Join-Path $PSScriptRoot "create-desktop-shortcut.ps1") -PublishPath $publishPath
-}
+# Siempre regenera el lanzador (vive dentro de publish/ y se borra al republicar).
+& (Join-Path $PSScriptRoot "create-desktop-shortcut.ps1") -PublishPath $publishPath
