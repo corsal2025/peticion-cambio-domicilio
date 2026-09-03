@@ -18,6 +18,23 @@
                         <li class="nav-item"><a class="nav-link text-dark" asp-page="/Comunas">Comunas</a></li>
                         <li class="nav-item"><a class="nav-link text-dark" asp-page="/Configuracion">Configuración</a></li>
                     </ul>
+                    @{
+                        // Single-file exe: Assembly.Location viene vacio; se usa la ruta del proceso.
+                        DateTime? buildStamp = null;
+                        try
+                        {
+                            var exe = Environment.ProcessPath;
+                            if (!string.IsNullOrEmpty(exe) && System.IO.File.Exists(exe))
+                            {
+                                buildStamp = System.IO.File.GetLastWriteTime(exe);
+                            }
+                        }
+                        catch { }
+                    }
+                    @if (buildStamp is not null)
+                    {
+                        <span class="navbar-text small text-muted">v @buildStamp.Value.ToString("dd-MM HH:mm")</span>
+                    }
                 </div>
             </div>
         </nav>

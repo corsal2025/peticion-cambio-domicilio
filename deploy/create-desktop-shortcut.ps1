@@ -3,8 +3,9 @@
     Crea el acceso directo en el Escritorio que abre el dashboard.
 
 .DESCRIPTION
-    Doble clic: si la app no esta corriendo la arranca (sin ventana de consola) y abre
-    la pestana; si ya corre, solo abre otra pestana.
+    Doble clic: si la app no corre la arranca; si corre pero el .exe es mas nuevo,
+    la reinicia para tomar la version nueva; si ya corre la version actual, solo
+    abre otra pestana.
 #>
 
 param(
@@ -23,6 +24,11 @@ $launcherPath = Join-Path $PublishPath "abrir-dashboard.ps1"
 $launcher = @"
 `$exe = Join-Path `$PSScriptRoot 'PeticionCambioDomicilio.exe'
 `$corriendo = Get-Process -Name 'PeticionCambioDomicilio' -ErrorAction SilentlyContinue
+if (`$corriendo -and (Get-Item `$exe).LastWriteTime -gt `$corriendo.StartTime) {
+    `$corriendo | Stop-Process -Force
+    Start-Sleep -Milliseconds 800
+    `$corriendo = `$null
+}
 if (-not `$corriendo) {
     Start-Process -FilePath `$exe -ArgumentList '--open-browser' -WorkingDirectory `$PSScriptRoot -WindowStyle Hidden
 } else {
