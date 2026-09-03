@@ -138,11 +138,6 @@
                     <button asp-page-handler="Enviar" class="btn btn-sm btn-outline-primary"
                             disabled="@(p.Estado == EstadoPeticion.Enviada ? "disabled" : null)">Enviar</button>
                 </form>
-                <form method="post" class="d-inline">
-                    <input type="hidden" name="id" value="@p.Id" />
-                    <button asp-page-handler="Borrador" class="btn btn-sm btn-outline-secondary"
-                            title="Descargar .eml y abrirlo en Outlook">Borrador</button>
-                </form>
                 <form method="post" class="d-inline" onsubmit="return confirm('¿Eliminar esta petición?');">
                     <input type="hidden" name="id" value="@p.Id" />
                     <button asp-page-handler="Eliminar" class="btn btn-sm btn-outline-danger">✕</button>

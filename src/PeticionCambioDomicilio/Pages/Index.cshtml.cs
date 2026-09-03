@@ -17,7 +17,6 @@ public sealed class IndexModel : PageModel
     private readonly ComunaDirectory _directory;
     private readonly IMailSender _mail;
     private readonly AppOptions _options;
-    private readonly EmlWriter _eml;
 
     public IndexModel(
         PeticionRepository repository,
@@ -25,8 +24,7 @@ public sealed class IndexModel : PageModel
         PeticionSender sender,
         ComunaDirectory directory,
         IMailSender mail,
-        AppOptions options,
-        EmlWriter eml)
+        AppOptions options)
     {
         _repository = repository;
         _importer = importer;
@@ -34,7 +32,6 @@ public sealed class IndexModel : PageModel
         _directory = directory;
         _mail = mail;
         _options = options;
-        _eml = eml;
     }
 
     public IReadOnlyList<Peticion> Peticiones { get; private set; } = Array.Empty<Peticion>();
@@ -111,26 +108,6 @@ public sealed class IndexModel : PageModel
         return RedirectToPage();
     }
 
-    /// <summary>Descarga el correo como .eml: doble clic y Outlook lo abre listo para enviar.
-    /// No usa EWS ni credenciales.</summary>
-    public IActionResult OnPostBorrador(long id)
-    {
-        var p = _repository.Get(id);
-        if (p is null)
-        {
-            TempData["Flash"] = "La peticion ya no existe.";
-            return RedirectToPage();
-        }
-
-        var bytes = _eml.Build(p);
-        if (bytes is null)
-        {
-            TempData["Flash"] = $"No hay correo registrado para la comuna \"{p.Comuna}\". Agregalo en Comunas.";
-            return RedirectToPage();
-        }
-
-        return File(bytes, "message/rfc822", _eml.FileNameFor(p));
-    }
 
 
     public IActionResult OnPostMarcar(long id)

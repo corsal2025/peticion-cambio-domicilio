@@ -25,7 +25,6 @@ builder.Services.AddSingleton(new PeticionRepository(dbPath));
 builder.Services.AddSingleton<IMailSender, EwsMailSender>();
 builder.Services.AddSingleton<ExcelPeticionImporter>();
 builder.Services.AddSingleton<PeticionSender>();
-builder.Services.AddSingleton<EmlWriter>();
 
 builder.Services.AddRazorPages();
 
