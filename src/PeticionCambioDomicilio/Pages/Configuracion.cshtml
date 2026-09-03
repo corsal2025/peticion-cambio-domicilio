@@ -6,6 +6,59 @@
 
 <h1 class="h3 mb-3">Configuración</h1>
 
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5 mb-3">
+            Verificación del sistema
+            @if (Model.TodoListo)
+            {
+                <span class="badge bg-success ms-2">LISTO PARA USAR</span>
+            }
+            else
+            {
+                <span class="badge bg-danger ms-2">FALTAN COSAS</span>
+            }
+        </h2>
+
+        <table class="table table-sm mb-3">
+            <tbody>
+            @foreach (var c in Model.Chequeos)
+            {
+                <tr>
+                    <td style="width:1%">
+                        @if (c.Ok)
+                        {
+                            <span class="text-success fs-5">&#x2714;</span>
+                        }
+                        else if (c.Bloqueante)
+                        {
+                            <span class="text-danger fs-5">&#x2716;</span>
+                        }
+                        else
+                        {
+                            <span class="text-warning fs-5">&#x26A0;</span>
+                        }
+                    </td>
+                    <td style="width:26%"><strong>@c.Nombre</strong></td>
+                    <td class="text-muted">@c.Detalle</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+
+        <form method="post">
+            <button asp-page-handler="ProbarCorreo" class="btn btn-primary">
+                Probar envío de correo ahora
+            </button>
+            <span class="small text-muted ms-2">
+                Manda un correo real por EWS a
+                <code>@(Model.ModoPruebaEmail ?? Model.Options.MailboxAddress)</code>.
+                Un solo intento.
+            </span>
+        </form>
+    </div>
+</div>
+
 <p class="text-muted">
     Todo se edita en <code>appsettings.Local.json</code> (junto al ejecutable, no viaja en git).
     Después reiniciá la app.
