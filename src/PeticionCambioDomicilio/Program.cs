@@ -17,6 +17,23 @@ var contentRoot = builder.Environment.ContentRootPath;
 var comunaCsv = !string.IsNullOrWhiteSpace(options.ComunaDirectoryCsvPath)
     ? options.ComunaDirectoryCsvPath
     : Path.Combine(contentRoot, "data", "comunas.csv");
+
+// Si el CSV no existe (o quedó vacío) junto al ejecutable, se escribe desde el recurso
+// embebido. Asi el directorio de comunas nunca queda vacio en un publish.
+if (!File.Exists(comunaCsv) || new FileInfo(comunaCsv).Length == 0)
+{
+    var asm = System.Reflection.Assembly.GetExecutingAssembly();
+    var resName = asm.GetManifestResourceNames()
+        .FirstOrDefault(n => n.EndsWith("comunas.seed.csv", StringComparison.OrdinalIgnoreCase));
+    if (resName is not null)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(comunaCsv)!);
+        using var res = asm.GetManifestResourceStream(resName)!;
+        using var outFile = File.Create(comunaCsv);
+        res.CopyTo(outFile);
+    }
+}
+
 builder.Services.AddSingleton(new ComunaDirectory(comunaCsv));
 
 var dbPath = Path.Combine(contentRoot, "data", "peticiones.db");

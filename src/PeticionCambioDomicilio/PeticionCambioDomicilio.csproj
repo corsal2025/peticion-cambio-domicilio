@@ -18,6 +18,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- El directorio semilla va embebido en el exe: si data/comunas.csv no existe
+         junto al ejecutable, se escribe desde aca al arrancar. -->
+    <EmbeddedResource Include="Comunas\comunas.seed.csv" />
     <None Update="data\comunas.csv" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
