@@ -100,10 +100,15 @@ dotnet run -c Release -- --test-ews
 Muestra qué métodos de autenticación ofrece el servidor y hace **un solo** intento con las
 credenciales configuradas. No repetir a ciegas: cada fallo suma al bloqueo de la cuenta.
 
-Estado al 02-09-2026: el servidor responde y ofrece `Negotiate | NTLM | Basic`, pero devuelve
-**401 Unauthorized** con las credenciales actuales. Falta confirmar con sistemas el formato del
-usuario (`DOMINIO\usuario` en vez del correo), si Basic está habilitado para esa cuenta, y si
-la clave está vigente.
+**El formato del usuario importa y no es obvio.** El dominio es `servervalpo`, no `munivalpo`:
+
+| Username | Resultado |
+| --- | --- |
+| `cambiodedomicilio@munivalpo.cl` | 401 Unauthorized |
+| `servervalpo\cambiodedomicilio` | **OK** |
+
+Verificado el 03-09-2026: credenciales aceptadas y correo de prueba entregado. El formato salió
+de `CambioDeDomicilio/publish/appsettings.json`, que ya lo tenía funcionando.
 
 ## Pendiente
 
