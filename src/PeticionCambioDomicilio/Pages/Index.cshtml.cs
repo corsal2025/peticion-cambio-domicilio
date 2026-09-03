@@ -161,7 +161,22 @@ public sealed class IndexModel : PageModel
 
     public IActionResult OnPostMarcar(long id)
     {
-        _repository.ToggleMarcada(id);
+        var marcada = _repository.ToggleMarcada(id);
+
+        // Si vino por fetch (JS), responder JSON y no recargar la pagina.
+        if (Request.Headers["X-Requested-With"] == "fetch")
+        {
+            return new JsonResult(new { marcada });
+        }
+
+        return RedirectToPage();
+    }
+
+    /// <summary>Borra TODAS las peticiones. La confirmacion la hace la pantalla.</summary>
+    public IActionResult OnPostBorrarTodo()
+    {
+        var n = _repository.DeleteAll();
+        TempData["Flash"] = $"Se borraron {n} peticion(es). El Excel no se toca; podes reimportar cuando quieras.";
         return RedirectToPage();
     }
 

@@ -199,6 +199,20 @@ public sealed class PeticionRepository
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Borra todas las filas. Devuelve cuantas habia. El Excel no se toca.</summary>
+    public int DeleteAll()
+    {
+        using var cn = Open();
+        using var count = cn.CreateCommand();
+        count.CommandText = "SELECT COUNT(*) FROM Peticion;";
+        var n = Convert.ToInt32(count.ExecuteScalar());
+
+        using var cmd = cn.CreateCommand();
+        cmd.CommandText = "DELETE FROM Peticion; DELETE FROM sqlite_sequence WHERE name = 'Peticion';";
+        cmd.ExecuteNonQuery();
+        return n;
+    }
+
     private static Peticion Map(SqliteDataReader r) => new()
     {
         Id = r.GetInt64(r.GetOrdinal("Id")),

@@ -34,6 +34,24 @@
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // No saltar al tope cuando una accion recarga la pagina: guardar el scroll antes de
+        // enviar cualquier formulario y volver a esa posicion al cargar. Tambien deja el foco
+        // cerca de la fila donde se hizo la accion.
+        (function () {
+            var KEY = "scroll:" + location.pathname;
+            document.addEventListener("submit", function () {
+                try { sessionStorage.setItem(KEY, String(window.scrollY)); } catch (e) {}
+            }, true);
+            window.addEventListener("DOMContentLoaded", function () {
+                var y;
+                try { y = sessionStorage.getItem(KEY); sessionStorage.removeItem(KEY); } catch (e) {}
+                if (y !== null && y !== undefined) {
+                    window.scrollTo(0, parseInt(y, 10) || 0);
+                }
+            });
+        })();
+    </script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
