@@ -46,4 +46,9 @@ public sealed class Peticion
 
     /// <summary>Direcciones a las que se envió (coma-separadas), para mostrar en la lista.</summary>
     public string? DestinatariosCorreo { get; set; }
+
+    /// <summary>Estado de la carpeta física en el flujo — los mismos valores del desplegable
+    /// "ESTADO DE LA CARPETA" del Excel. El operador lo cambia desde el dashboard.
+    /// Al importar entra como "CAMBIO DE DOMICILIO".</summary>
+    public string EstadoCarpeta { get; set; } = EstadoCarpetaCatalog.CambioDeDomicilio;
 }

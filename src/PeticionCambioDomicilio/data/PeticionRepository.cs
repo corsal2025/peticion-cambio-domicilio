@@ -36,7 +36,8 @@ public sealed class PeticionRepository
                 DestinatariosCorreo TEXT,
                 Oficina           TEXT,
                 OrdenImportacion  INTEGER NOT NULL DEFAULT 0,
-                Marcada           INTEGER NOT NULL DEFAULT 0
+                Marcada           INTEGER NOT NULL DEFAULT 0,
+                EstadoCarpeta     TEXT NOT NULL DEFAULT 'CAMBIO DE DOMICILIO'
             );
             CREATE UNIQUE INDEX IF NOT EXISTS UX_Peticion_Rut_Comuna
                 ON Peticion (Rut, Comuna);
@@ -49,6 +50,7 @@ public sealed class PeticionRepository
                      ("Oficina", "TEXT"),
                      ("OrdenImportacion", "INTEGER NOT NULL DEFAULT 0"),
                      ("Marcada", "INTEGER NOT NULL DEFAULT 0"),
+                     ("EstadoCarpeta", "TEXT NOT NULL DEFAULT 'CAMBIO DE DOMICILIO'"),
                  })
         {
             if (ColumnExists(cn, columna))
@@ -102,10 +104,10 @@ public sealed class PeticionRepository
         cmd.CommandText = """
             INSERT INTO Peticion
                 (NombreCompleto, Rut, Comuna, Clases, FechaSolicitud, Origen, Oficina,
-                 OrdenImportacion, RutInvalido, Estado, CreadaEn)
+                 OrdenImportacion, RutInvalido, Estado, CreadaEn, EstadoCarpeta)
             VALUES
                 ($nombre, $rut, $comuna, $clases, $fecha, $origen, $oficina,
-                 $orden, $rutInvalido, $estado, $creada)
+                 $orden, $rutInvalido, $estado, $creada, $estadoCarpeta)
             ON CONFLICT (Rut, Comuna) DO UPDATE SET
                 NombreCompleto   = excluded.NombreCompleto,
                 Clases           = excluded.Clases,
@@ -126,6 +128,7 @@ public sealed class PeticionRepository
         cmd.Parameters.AddWithValue("$rutInvalido", p.RutInvalido ? 1 : 0);
         cmd.Parameters.AddWithValue("$estado", (int)p.Estado);
         cmd.Parameters.AddWithValue("$creada", p.CreadaEn.ToString("o"));
+        cmd.Parameters.AddWithValue("$estadoCarpeta", p.EstadoCarpeta);
         cmd.ExecuteNonQuery();
 
         return !yaExistia;
@@ -172,6 +175,17 @@ public sealed class PeticionRepository
         cmd.Parameters.AddWithValue("$detalle", (object?)detalle ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$enviada", (object?)enviadaEn?.ToString("o") ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$dest", (object?)destinatarios ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Cambia el estado de la carpeta (desplegable estilo Excel).</summary>
+    public void SetEstadoCarpeta(long id, string estado)
+    {
+        using var cn = Open();
+        using var cmd = cn.CreateCommand();
+        cmd.CommandText = "UPDATE Peticion SET EstadoCarpeta = $e WHERE Id = $id;";
+        cmd.Parameters.AddWithValue("$e", estado);
         cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
     }
@@ -227,6 +241,7 @@ public sealed class PeticionRepository
         Oficina = r.IsDBNull(r.GetOrdinal("Oficina")) ? null : r.GetString(r.GetOrdinal("Oficina")),
         OrdenImportacion = r.GetInt64(r.GetOrdinal("OrdenImportacion")),
         Marcada = r.GetInt32(r.GetOrdinal("Marcada")) == 1,
+        EstadoCarpeta = r.IsDBNull(r.GetOrdinal("EstadoCarpeta")) ? "CAMBIO DE DOMICILIO" : r.GetString(r.GetOrdinal("EstadoCarpeta")),
         RutInvalido = r.GetInt32(r.GetOrdinal("RutInvalido")) == 1,
         Estado = (EstadoPeticion)r.GetInt32(r.GetOrdinal("Estado")),
         DetalleEstado = r.IsDBNull(r.GetOrdinal("DetalleEstado")) ? null : r.GetString(r.GetOrdinal("DetalleEstado")),

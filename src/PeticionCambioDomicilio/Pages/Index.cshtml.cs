@@ -110,6 +110,21 @@ public sealed class IndexModel : PageModel
 
 
 
+    public IActionResult OnPostEstadoCarpeta(long id, string estado)
+    {
+        if (Domain.EstadoCarpetaCatalog.Valores.Contains(estado))
+        {
+            _repository.SetEstadoCarpeta(id, estado);
+        }
+
+        if (Request.Headers["X-Requested-With"] == "fetch")
+        {
+            return new JsonResult(new { ok = true, finalizado = Domain.EstadoCarpetaCatalog.EsFinalizado(estado) });
+        }
+
+        return RedirectToPage();
+    }
+
     public IActionResult OnPostMarcar(long id)
     {
         var marcada = _repository.ToggleMarcada(id);

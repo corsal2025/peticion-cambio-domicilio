@@ -119,7 +119,8 @@ public sealed class ExcelPeticionImporter
                 filas++;
                 orden++;
 
-                var estado = TextNormalization.Fold(row.Cell(cEstado.Value).GetString());
+                var estadoCrudo = row.Cell(cEstado.Value).GetString();
+                var estado = TextNormalization.Fold(estadoCrudo);
                 if (estado != ordenObjetivo)
                 {
                     continue;
@@ -161,6 +162,7 @@ public sealed class ExcelPeticionImporter
                     RutInvalido = rutInvalido,
                     Estado = comunaCanonica is null ? EstadoPeticion.SinCorreoComuna : EstadoPeticion.Borrador,
                     DetalleEstado = comunaCanonica is null ? $"Comuna del Excel: \"{comunaRaw}\"" : null,
+                    EstadoCarpeta = EstadoCarpetaCatalog.Normalizar(estadoCrudo),
                 };
 
                 vistas.Add(peticion.Rut + "|" + peticion.Comuna);
