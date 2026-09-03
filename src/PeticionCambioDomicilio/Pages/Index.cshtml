@@ -59,6 +59,7 @@
             <th>Comuna</th>
             <th>Fecha solicitud</th>
             <th>Estado</th>
+            <th>Plazo (15 días hábiles)</th>
             <th>Origen</th>
             <th></th>
         </tr>
@@ -98,6 +99,34 @@
                     <div class="small text-muted">@p.EnviadaEn.Value.ToString("dd-MM-yyyy HH:mm") → @p.DestinatariosCorreo</div>
                 }
             </td>
+            <td>
+                @{
+                    var plazo = PeticionCambioDomicilio.Domain.PlazoInfo.Para(p);
+                }
+                @if (plazo.Inicio is null)
+                {
+                    <span class="text-muted">El reloj parte al enviar</span>
+                }
+                else
+                {
+                    var clasePlazo = plazo.Vencido ? "text-danger fw-bold"
+                        : plazo.DiasRestantes <= 3 ? "text-warning fw-bold"
+                        : "text-success";
+                    <span class="@clasePlazo">
+                        @if (plazo.Vencido)
+                        {
+                            <text>Vencido hace @(-plazo.DiasRestantes) d.</text>
+                        }
+                        else
+                        {
+                            <text>Quedan @plazo.DiasRestantes d.</text>
+                        }
+                    </span>
+                    <div class="small text-muted">
+                        Día @plazo.DiasTranscurridos de 15 · vence @plazo.Vence?.ToString("dd-MM-yyyy")
+                    </div>
+                }
+            </td>
             <td title="@p.Origen" style="cursor:help">@p.Oficina</td>
             <td class="text-nowrap">
                 <form method="post" class="d-inline">
@@ -119,7 +148,7 @@
     }
     @if (Model.Peticiones.Count == 0)
     {
-        <tr><td colspan="8" class="text-center text-muted py-4">Sin peticiones. Importá desde el Excel.</td></tr>
+        <tr><td colspan="9" class="text-center text-muted py-4">Sin peticiones. Importá desde el Excel.</td></tr>
     }
     </tbody>
 </table>
