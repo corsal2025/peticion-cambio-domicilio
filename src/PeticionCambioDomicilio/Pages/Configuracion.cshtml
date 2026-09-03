@@ -48,14 +48,28 @@
 
         <form method="post">
             <button asp-page-handler="ProbarCorreo" class="btn btn-primary">
-                Probar envío de correo ahora
+                Enviarme este correo de prueba
             </button>
             <span class="small text-muted ms-2">
-                Manda un correo real por EWS a
-                <code>@(Model.ModoPruebaEmail ?? Model.Options.MailboxAddress)</code>.
-                Un solo intento.
+                Manda el correo de abajo, tal cual, a
+                <code>@(Model.ModoPruebaEmail ?? Model.Options.MailboxAddress)</code> (con <code>[PRUEBA]</code> adelante).
             </span>
         </form>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5 mb-2">Correo que recibe la comuna</h2>
+        <p class="small text-muted mb-2">
+            Esto es exactamente lo que se envía por cada petición — datos de
+            <strong>@Model.VistaPreviaComuna</strong>@(Model.VistaPreviaDestino is null ? "" : $" → {Model.VistaPreviaDestino}").
+            Solo cambian el nombre y el RUT.
+        </p>
+        <div class="border rounded p-3 bg-light">
+            <div class="mb-2"><strong>Asunto:</strong> @Model.VistaPreviaAsunto</div>
+            <pre class="mb-0" style="white-space:pre-wrap;font-family:inherit;">@Model.VistaPreviaCuerpo</pre>
+        </div>
     </div>
 </div>
 

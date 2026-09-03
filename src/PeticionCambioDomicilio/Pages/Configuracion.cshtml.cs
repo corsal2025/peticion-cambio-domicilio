@@ -38,7 +38,38 @@ public sealed class ConfiguracionModel : PageModel
     public IReadOnlyList<Chequeo> Chequeos { get; private set; } = Array.Empty<Chequeo>();
     public bool TodoListo => Chequeos.Where(c => c.Bloqueante).All(c => c.Ok);
 
-    public void OnGet() => Verificar();
+    /// <summary>El correo EXACTO que recibiria una comuna, con datos de una peticion real
+    /// (o de ejemplo si no hay ninguna cargada). Para corroborar el contenido antes de enviar.</summary>
+    public string VistaPreviaAsunto { get; private set; } = "";
+    public string VistaPreviaCuerpo { get; private set; } = "";
+    public string VistaPreviaComuna { get; private set; } = "";
+    public string? VistaPreviaDestino { get; private set; }
+
+    public void OnGet()
+    {
+        Verificar();
+        ArmarVistaPrevia();
+    }
+
+    private void ArmarVistaPrevia()
+    {
+        var real = _repository.All().FirstOrDefault(p => p.Estado != EstadoPeticion.Enviada)
+                   ?? _repository.All().FirstOrDefault();
+
+        var muestra = real ?? new Peticion
+        {
+            NombreCompleto = "JUAN PEREZ GONZALEZ",
+            Rut = "12.345.678-5",
+            Comuna = "VINA DEL MAR",
+        };
+
+        VistaPreviaAsunto = EmailTemplate.Subject(muestra);
+        VistaPreviaCuerpo = EmailTemplate.Body(muestra, _options.MailboxAddress);
+        VistaPreviaComuna = muestra.Comuna;
+        VistaPreviaDestino = _directory.EmailsFor(muestra.Comuna) is { Count: > 0 } dir
+            ? string.Join(", ", dir)
+            : null;
+    }
 
     /// <summary>Manda un correo de prueba real por EWS. Un solo intento, para no sumar al bloqueo
     /// de la cuenta si las credenciales estuvieran mal.</summary>
@@ -51,14 +82,27 @@ public sealed class ConfiguracionModel : PageModel
         }
 
         var destino = ModoPruebaEmail ?? _options.MailboxAddress;
+
+        var real = _repository.All().FirstOrDefault(p => p.Estado != EstadoPeticion.Enviada)
+                   ?? _repository.All().FirstOrDefault();
+        var muestra = real ?? new Peticion
+        {
+            NombreCompleto = "JUAN PEREZ GONZALEZ",
+            Rut = "12.345.678-5",
+            Comuna = "VINA DEL MAR",
+        };
+
+        // El asunto y cuerpo son EXACTAMENTE los que recibiria la comuna; solo se antepone [PRUEBA].
         try
         {
             await _mail.SendAsync(
                 destino,
-                "[PRUEBA] Verificacion del sistema - Peticion de Cambio de Domicilio",
-                "Si estas leyendo esto, el envio por EWS funciona y el sistema esta listo para pedir carpetas.",
+                "[PRUEBA] " + EmailTemplate.Subject(muestra),
+                "*** ESTE ES EL CORREO QUE RECIBIRIA LA COMUNA DE " + muestra.Comuna + " ***" +
+                    Environment.NewLine + new string('-', 60) + Environment.NewLine + Environment.NewLine +
+                    EmailTemplate.Body(muestra, _options.MailboxAddress),
                 HttpContext.RequestAborted);
-            TempData["Flash"] = $"OK: correo de prueba enviado a {destino}. Revisa esa casilla.";
+            TempData["Flash"] = $"OK: correo de prueba enviado a {destino}. Es identico al que recibiria la comuna (con [PRUEBA] adelante).";
         }
         catch (Exception ex)
         {
