@@ -7,8 +7,9 @@ namespace PeticionCambioDomicilio.Domain;
 /// </summary>
 public static class EmailTemplate
 {
-    public static string Subject(Peticion p) =>
-        $"Solicitud de cambio de domicilio — {p.NombreCompleto} ({p.Rut})";
+    // Sin nombre ni RUT en el asunto: los datos personales van solo en el cuerpo, no en la
+    // linea de asunto que queda visible en listados de correo, notificaciones y logs.
+    public static string Subject(Peticion p) => "Solicitud de cambio de domicilio";
 
     public static string Body(Peticion p, string firmaCorreo)
     {
