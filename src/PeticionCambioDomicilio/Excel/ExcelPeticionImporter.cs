@@ -94,6 +94,22 @@ public sealed class ExcelPeticionImporter
             var cFecha = Col(_options.Columns.FechaSolicitud);
             var cClases = Col(_options.Columns.Clases);
 
+            // Red de seguridad: si alguien escribe encima del encabezado "ESTADO DE LA CARPETA"
+            // (pasó de verdad: quedó con el texto "CAMBIO DE DOMICILIO SOLICITADO"), la columna
+            // sigue estando donde siempre — justo antes de "DECISIÓN FINAL". Se usa esa posición
+            // en vez de descartar la hoja entera.
+            if (cEstado is null)
+            {
+                var cDecision = Col("DECISION FINAL");
+                if (cDecision is > 1)
+                {
+                    cEstado = cDecision.Value - 1;
+                    avisos.Add($"Hoja \"{sheet.Name}\": el encabezado de \"{_options.Columns.EstadoCarpeta}\" " +
+                               "no dice eso (alguien escribió un valor encima) — se usó la columna junto a " +
+                               "\"DECISIÓN FINAL\" igual. Conviene corregir el encabezado en el Excel.");
+                }
+            }
+
             if (cNombre is null || cRut is null || cEstado is null || cComuna is null)
             {
                 avisos.Add($"Hoja \"{sheet.Name}\": faltan columnas obligatorias " +
