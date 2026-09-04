@@ -59,14 +59,14 @@
 <table class="table table-hover align-middle mb-0">
     <thead>
         <tr>
-            <th style="width:32px" class="text-center">✓</th>
+            <th class="text-center" style="width:1%">✓</th>
             <th>Nombre</th>
-            <th style="width:110px">RUT</th>
-            <th style="width:130px">Comuna</th>
-            <th style="width:92px">F. solicitud</th>
-            <th style="width:130px">Envío</th>
-            <th style="width:140px">Plazo · 15 d. háb.</th>
-            <th style="width:110px">Origen</th>
+            <th>RUT</th>
+            <th>Comuna</th>
+            <th>F. solicitud</th>
+            <th>Envío</th>
+            <th>Plazo · 15 d. háb.</th>
+            <th>Origen</th>
             <th style="width:1%"></th>
         </tr>
     </thead>
@@ -81,62 +81,49 @@
                             title="Marcar / desmarcar">@(p.Marcada ? "☑" : "☐")</button>
                 </form>
             </td>
-            <td>@p.NombreCompleto</td>
-            <td class="col-rut">@p.Rut @(p.RutInvalido ? "⚠" : "")</td>
-            <td>@p.Comuna</td>
-            <td class="col-fecha">@(p.FechaSolicitud?.ToString("dd-MM-yyyy") ?? "—")</td>
-            <td class="col-fecha">
+            <td class="dato">@p.NombreCompleto</td>
+            <td class="dato text-center">@p.Rut @(p.RutInvalido ? "⚠" : "")</td>
+            <td class="dato">@p.Comuna</td>
+            <td class="dato text-center">@(p.FechaSolicitud?.ToString("dd-MM-yyyy") ?? "—")</td>
+            <td class="dato text-center">
+                @{
+                    var envioTitulo = !string.IsNullOrEmpty(p.DetalleEstado) ? p.DetalleEstado : null;
+                }
                 @if (p.Estado == EstadoPeticion.Enviada && p.EnviadaEn is not null)
                 {
-                    <strong>@p.EnviadaEn.Value.ToString("dd-MM-yyyy")</strong>
-                    <div class="small text-muted">@p.EnviadaEn.Value.ToString("HH:mm")</div>
+                    <span title="@envioTitulo" style="cursor:help">@p.EnviadaEn.Value.ToString("dd-MM-yyyy HH:mm")</span>
                 }
                 else if (p.Estado == EstadoPeticion.SinCorreoComuna)
                 {
-                    <span class="badge bg-warning text-dark">Sin correo comuna</span>
+                    <span class="badge bg-warning text-dark" title="@envioTitulo" style="cursor:help">Sin correo comuna</span>
                 }
                 else if (p.Estado == EstadoPeticion.Error)
                 {
-                    <span class="badge bg-danger">Error</span>
+                    <span class="badge bg-danger" title="@envioTitulo" style="cursor:help">Error</span>
                 }
                 else
                 {
-                    <span class="text-muted">Sin enviar</span>
-                }
-                @if (!string.IsNullOrEmpty(p.DetalleEstado))
-                {
-                    <div class="small text-muted">@p.DetalleEstado</div>
+                    <span class="text-muted fw-normal">Sin enviar</span>
                 }
             </td>
-            <td>
+            <td class="dato text-center">
                 @{
                     var plazo = PeticionCambioDomicilio.Domain.PlazoInfo.Para(p);
                 }
                 @if (plazo.Inicio is null)
                 {
-                    <span class="text-muted">El reloj parte al enviar</span>
+                    <span class="text-muted fw-normal">El reloj parte al enviar</span>
                 }
                 else
                 {
-                    var clasePlazo = plazo.Vencido ? "text-danger fw-bold"
-                        : plazo.DiasRestantes <= 3 ? "text-warning fw-bold"
-                        : "text-success";
-                    <span class="@clasePlazo">
-                        @if (plazo.Vencido)
-                        {
-                            <text>Vencido hace @(-plazo.DiasRestantes) d.</text>
-                        }
-                        else
-                        {
-                            <text>Quedan @plazo.DiasRestantes d.</text>
-                        }
+                    var clasePlazo = plazo.Vencido ? "text-danger" : plazo.DiasRestantes <= 3 ? "text-warning" : "text-success";
+                    var plazoTitulo = $"Día {plazo.DiasTranscurridos} de 15 · vence {plazo.Vence?.ToString("dd-MM-yyyy")}";
+                    <span class="@clasePlazo" title="@plazoTitulo" style="cursor:help">
+                        @(plazo.Vencido ? $"Vencido hace {-plazo.DiasRestantes} d." : $"Quedan {plazo.DiasRestantes} d.")
                     </span>
-                    <div class="small text-muted">
-                        Día @plazo.DiasTranscurridos de 15 · vence @plazo.Vence?.ToString("dd-MM-yyyy")
-                    </div>
                 }
             </td>
-            <td title="@p.Origen" style="cursor:help">@p.Oficina</td>
+            <td class="dato text-center" title="@p.Origen" style="cursor:help">@p.Oficina</td>
             <td class="col-acciones">
                 <form method="post" class="d-inline">
                     <input type="hidden" name="id" value="@p.Id" />

@@ -29,14 +29,20 @@ h1.h3 { font-size: 1.25rem; }
   white-space: nowrap;
   vertical-align: bottom;
   border-bottom: 2px solid #dee2e6;
-  padding: .35rem .5rem;
+  padding: .35rem .6rem;
+  text-align: center;
 }
 .table > tbody > tr > td {
-  padding: .3rem .5rem;
+  padding: .3rem .6rem;
   vertical-align: middle;
+  white-space: nowrap;
 }
-.table > tbody > tr > td.col-rut,
-.table > tbody > tr > td.col-fecha,
+/* Nombre puede ser largo: la unica columna que no se fuerza a una linea rigida,
+   pero el contenedor .table-responsive scrollea horizontal si hace falta. */
+.table > tbody > tr > td:nth-child(2) { white-space: nowrap; }
+.table > tbody > tr > td.dato {
+  font-weight: 700;
+}
 .table > tbody > tr > td.col-acciones { white-space: nowrap; }
 
 .table .badge { font-weight: 500; font-size: .7rem; }
