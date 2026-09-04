@@ -65,7 +65,6 @@
             <th style="width:130px">Comuna</th>
             <th style="width:92px">F. solicitud</th>
             <th style="width:130px">Envío</th>
-            <th style="width:210px">Estado carpeta</th>
             <th style="width:140px">Plazo · 15 d. háb.</th>
             <th style="width:110px">Origen</th>
             <th style="width:1%"></th>
@@ -108,18 +107,6 @@
                 {
                     <div class="small text-muted">@p.DetalleEstado</div>
                 }
-            </td>
-            <td>
-                <form method="post" class="js-estado-carpeta" data-id="@p.Id">
-                    <input type="hidden" name="id" value="@p.Id" />
-                    <select name="estado" class="form-select form-select-sm js-estado-select">
-                        @foreach (var v in PeticionCambioDomicilio.Domain.EstadoCarpetaCatalog.Valores)
-                        {
-                            <option value="@v" selected="@(v == p.EstadoCarpeta)">@v</option>
-                        }
-                    </select>
-                    <noscript><button class="btn btn-sm btn-outline-secondary mt-1" asp-page-handler="EstadoCarpeta">Guardar</button></noscript>
-                </form>
             </td>
             <td>
                 @{
@@ -166,7 +153,7 @@
     }
     @if (Model.Peticiones.Count == 0)
     {
-        <tr><td colspan="10" class="text-center text-muted py-4">Sin peticiones. Importá desde el Excel.</td></tr>
+        <tr><td colspan="9" class="text-center text-muted py-4">Sin peticiones. Importá desde el Excel.</td></tr>
     }
     </tbody>
 </table>
@@ -175,25 +162,6 @@
 @section Scripts {
 <script>
     // Marcar/desmarcar sin recargar la pagina.
-    // Cambiar el estado de la carpeta (desplegable) sin recargar.
-    document.querySelectorAll("form.js-estado-carpeta").forEach(function (form) {
-        var sel = form.querySelector(".js-estado-select");
-        sel.addEventListener("change", function () {
-            var data = new FormData(form);
-            var token = form.querySelector('input[name="__RequestVerificationToken"]');
-            sel.disabled = true;
-            fetch(location.pathname + "?handler=EstadoCarpeta", {
-                method: "POST",
-                headers: { "X-Requested-With": "fetch", "RequestVerificationToken": token ? token.value : "" },
-                body: data
-            }).then(function (r) { return r.json(); })
-              .then(function () {
-                  sel.classList.add("border-success");
-                  setTimeout(function () { sel.classList.remove("border-success"); }, 1200);
-              }).catch(function () { form.submit(); })
-              .finally(function () { sel.disabled = false; });
-        });
-    });
 
     document.querySelectorAll("form.js-marcar").forEach(function (form) {
         form.addEventListener("submit", function (ev) {
