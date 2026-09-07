@@ -63,7 +63,7 @@ public sealed class ConfiguracionModel : PageModel
             Comuna = "VINA DEL MAR",
         };
 
-        VistaPreviaAsunto = EmailTemplate.Subject(muestra);
+        VistaPreviaAsunto = EmailTemplate.Subject();
         VistaPreviaCuerpo = EmailTemplate.Body(muestra, _options.MailboxAddress);
         VistaPreviaComuna = muestra.Comuna;
         VistaPreviaDestino = _directory.EmailsFor(muestra.Comuna) is { Count: > 0 } dir
@@ -97,7 +97,7 @@ public sealed class ConfiguracionModel : PageModel
         {
             await _mail.SendAsync(
                 destino,
-                "[PRUEBA] " + EmailTemplate.Subject(muestra),
+                "[PRUEBA] " + EmailTemplate.Subject(),
                 "*** ESTE ES EL CORREO QUE RECIBIRIA LA COMUNA DE " + muestra.Comuna + " ***" +
                     Environment.NewLine + new string('-', 60) + Environment.NewLine + Environment.NewLine +
                     EmailTemplate.Body(muestra, _options.MailboxAddress),

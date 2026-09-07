@@ -4,11 +4,13 @@ using PeticionCambioDomicilio.Ews;
 
 namespace PeticionCambioDomicilio.Domain;
 
-public sealed record SendResult(EstadoPeticion Estado, string Mensaje);
+public sealed record SendResult(EstadoPeticion Estado, string Mensaje, int Personas = 0);
 
 /// <summary>
-/// Envía una petición: busca el/los correo(s) de la comuna en el directorio, arma el
-/// correo con la plantilla del art. 14, lo manda por EWS y actualiza el estado.
+/// Envía las peticiones de cambio de domicilio. Regla central: <b>una comuna recibe un solo
+/// correo por tanda</b>, con la lista de todas sus personas pendientes. Busca el/los correo(s)
+/// de la comuna en el directorio, arma el correo con la plantilla del art. 14, lo manda por EWS
+/// y actualiza el estado de cada petición del grupo.
 /// </summary>
 public sealed class PeticionSender
 {
@@ -29,6 +31,23 @@ public sealed class PeticionSender
         _options = options;
     }
 
+    private static bool EsPendiente(Peticion p) =>
+        p.Estado is EstadoPeticion.Borrador or EstadoPeticion.SinCorreoComuna or EstadoPeticion.Error;
+
+    /// <summary>Comunas con al menos una petición pendiente y sin correo en el directorio.</summary>
+    public IReadOnlyList<string> ComunasPendientesSinCorreo() =>
+        _repository.All()
+            .Where(EsPendiente)
+            .Select(p => p.Comuna)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(c => _directory.EmailsFor(c).Count == 0)
+            .OrderBy(c => c, StringComparer.CurrentCulture)
+            .ToList();
+
+    /// <summary>
+    /// Envía UNA petición puntual en un correo de una sola persona. Solo lo usa el diagnóstico
+    /// <c>--send-test</c>; la interfaz siempre agrupa por comuna con <see cref="SendComunaAsync"/>.
+    /// </summary>
     public async Task<SendResult> SendAsync(long peticionId, CancellationToken cancellationToken)
     {
         var p = _repository.Get(peticionId);
@@ -42,71 +61,127 @@ public sealed class PeticionSender
             return new SendResult(EstadoPeticion.Enviada, "Ya estaba enviada.");
         }
 
+        return await SendGrupoAsync(p.Comuna, new[] { p }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Envía en UN correo todas las peticiones pendientes de una comuna (Borrador / Sin correo /
+    /// Error). No toca las que ya están Enviadas. Devuelve el estado resultante del grupo.
+    /// </summary>
+    public async Task<SendResult> SendComunaAsync(string comuna, CancellationToken cancellationToken)
+    {
+        var pendientes = _repository.All()
+            .Where(p => string.Equals(p.Comuna, comuna, StringComparison.OrdinalIgnoreCase))
+            .Where(EsPendiente)
+            .OrderBy(p => p.OrdenImportacion).ThenBy(p => p.Id)
+            .ToList();
+
+        if (pendientes.Count == 0)
+        {
+            return new SendResult(EstadoPeticion.Enviada, $"{comuna}: no hay peticiones pendientes.");
+        }
+
+        return await SendGrupoAsync(comuna, pendientes, cancellationToken);
+    }
+
+    private async Task<SendResult> SendGrupoAsync(
+        string comuna, IReadOnlyList<Peticion> grupo, CancellationToken cancellationToken)
+    {
         if (!_mail.IsConfigured)
         {
             return new SendResult(EstadoPeticion.Error,
                 "El correo EWS no está configurado (Peticion:Ews en appsettings.Local.json).");
         }
 
-        var destinatarios = _directory.EmailsFor(p.Comuna);
+        var destinatarios = _directory.EmailsFor(comuna);
         if (destinatarios.Count == 0)
         {
-            _repository.UpdateEstado(p.Id, EstadoPeticion.SinCorreoComuna,
-                $"Sin correo registrado para la comuna \"{p.Comuna}\".", null, null);
+            foreach (var p in grupo)
+            {
+                _repository.UpdateEstado(p.Id, EstadoPeticion.SinCorreoComuna,
+                    $"Sin correo registrado para la comuna \"{comuna}\".", null, null);
+            }
+
             return new SendResult(EstadoPeticion.SinCorreoComuna,
-                $"No hay correo en el directorio para la comuna \"{p.Comuna}\".");
+                $"{comuna}: sin correo en el directorio. {grupo.Count} petición(es) en espera — " +
+                "cargá el correo en la pantalla Comunas y volvé a enviar.");
         }
 
-        var subject = EmailTemplate.Subject(p);
-        var body = EmailTemplate.Body(p, _options.MailboxAddress);
+        var subject = EmailTemplate.Subject();
+        var body = EmailTemplate.Body(grupo, _options.MailboxAddress);
 
         // MODO PRUEBA: nada sale hacia la municipalidad. Un solo correo a la casilla de prueba,
-        // marcado, diciendo a dónde habría ido de verdad.
+        // marcado, diciendo a dónde habría ido de verdad y a cuántas personas incluye.
         var modoPrueba = !string.IsNullOrWhiteSpace(_options.TestModeEmail);
-        var realDestinatarios = destinatarios;
+        var envioA = destinatarios;
         if (modoPrueba)
         {
             subject = $"[PRUEBA] {subject}";
             var cabecera = new[]
             {
                 "*** CORREO DE PRUEBA - NO SE ENVIO A LA MUNICIPALIDAD ***",
-                $"Comuna destino real: {p.Comuna}",
+                $"Comuna destino real: {comuna}",
                 $"Habria ido a: {string.Join(", ", destinatarios)}",
+                $"Personas en este correo: {grupo.Count}",
                 new string('-', 60),
                 string.Empty,
                 string.Empty,
             };
             body = string.Join("\n", cabecera) + body;
-            realDestinatarios = new[] { _options.TestModeEmail!.Trim() };
+            envioA = new[] { _options.TestModeEmail!.Trim() };
         }
 
         try
         {
-            foreach (var to in realDestinatarios)
+            foreach (var to in envioA)
             {
                 await _mail.SendAsync(to, subject, body, cancellationToken);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException
+        catch (EwsAuthException ex)
+        {
+            MarcarGrupo(grupo, EstadoPeticion.Error, ex.Message, null, null);
+            return new SendResult(EstadoPeticion.Error, $"{comuna}: {ex.Message}");
+        }
+        catch (Exception ex) when (ex is EwsSendException or HttpRequestException
                                        or System.Net.Sockets.SocketException or TaskCanceledException)
         {
-            _repository.UpdateEstado(p.Id, EstadoPeticion.Error, ex.Message, null, null);
-            return new SendResult(EstadoPeticion.Error, $"Falló el envío: {ex.Message}");
+            MarcarGrupo(grupo, EstadoPeticion.Error, ex.Message, null, null);
+            return new SendResult(EstadoPeticion.Error, $"{comuna}: falló el envío — {ex.Message}");
         }
 
-        var joined = string.Join(", ", realDestinatarios);
-        var detalle = modoPrueba ? $"MODO PRUEBA — desviada desde {string.Join(", ", destinatarios)}" : null;
-        _repository.UpdateEstado(p.Id, EstadoPeticion.Enviada, detalle, DateTimeOffset.Now, joined);
+        var joined = string.Join(", ", envioA);
+        var ahora = DateTimeOffset.Now;
+        var detalle = modoPrueba
+            ? $"MODO PRUEBA — desviada desde {string.Join(", ", destinatarios)} · {grupo.Count} persona(s)"
+            : $"1 correo con {grupo.Count} persona(s) de {comuna}";
 
-        // Al enviar, la carpeta pasa de "CAMBIO DE DOMICILIO" a "... SOLICITADO" automaticamente.
-        // Si el operador ya la habia movido a otro estado, no se pisa.
-        if (p.EstadoCarpeta == EstadoCarpetaCatalog.CambioDeDomicilio)
+        foreach (var p in grupo)
         {
-            _repository.SetEstadoCarpeta(p.Id, "CAMBIO DE DOMICILIO SOLICITADO");
+            _repository.UpdateEstado(p.Id, EstadoPeticion.Enviada, detalle, ahora, joined);
+
+            // Al enviar, la carpeta pasa de "CAMBIO DE DOMICILIO" a "... SOLICITADO" automaticamente.
+            // Si el operador ya la habia movido a otro estado, no se pisa.
+            if (p.EstadoCarpeta == EstadoCarpetaCatalog.CambioDeDomicilio)
+            {
+                _repository.SetEstadoCarpeta(p.Id, "CAMBIO DE DOMICILIO SOLICITADO");
+            }
         }
+
         return new SendResult(EstadoPeticion.Enviada,
             modoPrueba
-                ? $"[PRUEBA] Enviada a {joined} (habría ido a {p.Comuna})."
-                : $"Enviada a {joined}.");
+                ? $"[PRUEBA] {comuna}: {grupo.Count} persona(s) en 1 correo a {joined} (habría ido a la comuna)."
+                : $"{comuna}: {grupo.Count} persona(s) enviadas en 1 correo a {joined}.",
+            grupo.Count);
+    }
+
+    private void MarcarGrupo(
+        IReadOnlyList<Peticion> grupo, EstadoPeticion estado, string? detalle,
+        DateTimeOffset? enviadaEn, string? destinatarios)
+    {
+        foreach (var p in grupo)
+        {
+            _repository.UpdateEstado(p.Id, estado, detalle, enviadaEn, destinatarios);
+        }
     }
 }

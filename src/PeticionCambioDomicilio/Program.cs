@@ -108,7 +108,7 @@ if (args.Contains("--test-ews"))
         Console.Error.WriteLine($"FALLO: {ex.Message}");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Si dice 401 Unauthorized, probar con sistemas:");
-        Console.Error.WriteLine(@"  - Username como DOMINIO\usuario (ej. munivalpo\cambiodedomicilio) en vez del correo.");
+        Console.Error.WriteLine(@"  - Username como DOMINIO\usuario (el que funciona: servervalpo\cambiodedomicilio) en vez del correo.");
         Console.Error.WriteLine("  - Que la cuenta tenga Basic auth habilitado en Exchange para EWS.");
         Console.Error.WriteLine("  - Que la clave sea la vigente (no expirada).");
         Console.Error.WriteLine("NO repetir muchas veces: la cuenta se bloquea por intentos fallidos.");
@@ -188,6 +188,13 @@ if (args.Contains("--import"))
 
     var repo = app.Services.GetRequiredService<PeticionRepository>();
     var importer = app.Services.GetRequiredService<ExcelPeticionImporter>();
+
+    var backup = repo.Backup("import");
+    if (backup is not null)
+    {
+        Console.WriteLine($"Respaldo previo: {backup}");
+    }
+
     var r = importer.Import(path, repo.AddIfNew, repo.All(), repo.Delete);
     Console.WriteLine($"Hojas leídas:          {r.HojasLeidas}");
     Console.WriteLine($"Filas leídas:          {r.FilasLeidas}");

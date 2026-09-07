@@ -24,6 +24,6 @@ public static class TextNormalization
         }
 
         var collapsed = sb.ToString().Normalize(NormalizationForm.FormC);
-        return string.Join(' ', collapsed.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        return string.Join(' ', collapsed.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
     }
 }

@@ -1,3 +1,5 @@
+@inject PeticionCambioDomicilio.AppOptions Options
+@inject PeticionCambioDomicilio.Ews.IMailSender Mail
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -39,6 +41,22 @@
             </div>
         </nav>
     </header>
+    @{
+        var envioReal = Mail.IsConfigured && string.IsNullOrWhiteSpace(Options.TestModeEmail);
+        var modoPrueba = !string.IsNullOrWhiteSpace(Options.TestModeEmail);
+    }
+    @if (envioReal)
+    {
+        <div class="w-100 text-center fw-bold text-dark py-1" style="background:#ffc107;letter-spacing:.5px;">
+            ⚠ ENVÍO REAL ACTIVO — los correos salen a las municipalidades
+        </div>
+    }
+    else if (modoPrueba)
+    {
+        <div class="w-100 text-center fw-bold text-white py-1" style="background:#dc3545;letter-spacing:.5px;">
+            MODO PRUEBA — nada llega a las municipalidades (todo va a @Options.TestModeEmail)
+        </div>
+    }
     <div class="container">
         <main role="main" class="pb-3">
             @if (TempData["Flash"] is string flash)

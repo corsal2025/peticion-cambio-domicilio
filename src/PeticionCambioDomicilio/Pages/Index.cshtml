@@ -16,6 +16,16 @@
     </div>
 }
 
+@if (Model.ComunasSinCorreo.Count > 0)
+{
+    <div class="alert alert-warning py-2">
+        <strong>⚠ @Model.ComunasSinCorreo.Count comuna(s) sin correo en el directorio:</strong>
+        @string.Join(", ", Model.ComunasSinCorreo).
+        Esas peticiones quedan en espera. Cargá el correo en
+        <a asp-page="/Comunas">Comunas</a> y volvé a enviar — se retoman solas.
+    </div>
+}
+
 <div class="row mb-3">
     <div class="col">
         @if (!Model.MailListo)
@@ -42,13 +52,15 @@
     <form method="post">
         <button asp-page-handler="Importar" class="btn btn-sm btn-primary">Importar / actualizar desde Excel</button>
     </form>
-    <form method="post" onsubmit="return confirm('¿Enviar correo a todas las comunas de las peticiones pendientes?');">
+    <form method="post" onsubmit="return confirm('Se envía UN correo por comuna con todas sus personas pendientes@(Model.ModoPruebaEmail is null ? "" : " (MODO PRUEBA: nada llega a las municipalidades)"). ¿Continuar?');">
         <button asp-page-handler="EnviarTodas" class="btn btn-sm btn-outline-primary">Enviar todas las pendientes</button>
     </form>
     <a href="/Imprimir" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir lista</a>
     <a href="/Imprimir?marcadas=true" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir marcadas</a>
     <span class="text-muted small ms-1">@Model.Peticiones.Count peticiones</span>
-    <form method="post" class="ms-auto" onsubmit="return confirm('¿BORRAR las @Model.Peticiones.Count peticiones cargadas? El Excel NO se toca: podés reimportar cuando quieras. Esto solo limpia la lista del dashboard.');">
+    <span class="badge bg-success text-white py-1 px-2 ms-2">✓ @Model.Peticiones.Count(p => p.Estado == EstadoPeticion.Enviada) enviadas</span>
+    <span class="badge bg-secondary text-white py-1 px-2 ms-1">⏳ @Model.Peticiones.Count(p => p.Estado != EstadoPeticion.Enviada) pendientes</span>
+    <form method="post" class="ms-auto" onsubmit="return confirm('¿BORRAR las @Model.Peticiones.Count peticiones cargadas? Esto borra también el HISTORIAL DE ENVÍO (qué se mandó y cuándo). Se guarda un respaldo automático de la base antes. El Excel NO se toca.');">
         <button asp-page-handler="BorrarTodo" class="btn btn-sm btn-outline-danger" disabled="@(Model.Peticiones.Count == 0 ? "disabled" : null)">
             Borrar todos los datos
         </button>
@@ -62,7 +74,7 @@
             <th class="text-center" style="width:1%">✓</th>
             <th>Nombre</th>
             <th>RUT</th>
-            <th>Comuna</th>
+            <th class="text-center">Comuna</th>
             <th>F. solicitud</th>
             <th>Envío</th>
             <th>Plazo · 15 d. háb.</th>
@@ -73,7 +85,21 @@
     <tbody>
     @foreach (var p in Model.Peticiones)
     {
-        <tr id="fila-@p.Id" class="@(p.Marcada ? "table-info" : p.RutInvalido ? "table-warning" : "")">
+        var pendientesComuna = Model.PendientesPorComuna.TryGetValue(p.Comuna, out var n) ? n : 0;
+        var esEnviada = p.Estado == EstadoPeticion.Enviada;
+        var claseFila = p.Marcada
+            ? "table-info fila-marcada"
+            : esEnviada
+                ? "fila-enviada"
+                : p.Estado == EstadoPeticion.SinCorreoComuna
+                    ? "table-warning fila-sincorreo"
+                    : p.Estado == EstadoPeticion.Error
+                        ? "table-danger fila-error"
+                        : p.RutInvalido
+                            ? "table-warning fila-rutinvalido"
+                            : "fila-pendiente";
+
+        <tr id="fila-@p.Id" class="@claseFila">
             <td class="text-center">
                 <form method="post" class="d-inline js-marcar" data-id="@p.Id">
                     <input type="hidden" name="id" value="@p.Id" />
@@ -83,7 +109,7 @@
             </td>
             <td class="dato">@p.NombreCompleto</td>
             <td class="dato text-center">@p.Rut @(p.RutInvalido ? "⚠" : "")</td>
-            <td class="dato">@p.Comuna</td>
+            <td class="dato text-center">@p.Comuna</td>
             <td class="dato text-center">@(p.FechaSolicitud?.ToString("dd-MM-yyyy") ?? "—")</td>
             <td class="dato text-center">
                 @{
@@ -91,19 +117,21 @@
                 }
                 @if (p.Estado == EstadoPeticion.Enviada && p.EnviadaEn is not null)
                 {
-                    <span title="@envioTitulo" style="cursor:help">@p.EnviadaEn.Value.ToString("dd-MM-yyyy HH:mm")</span>
+                    <span class="badge bg-success text-white px-2 py-1 shadow-sm" title="@envioTitulo" style="cursor:help">
+                        ✓ Enviado (@p.EnviadaEn.Value.ToString("dd-MM-yyyy HH:mm"))
+                    </span>
                 }
                 else if (p.Estado == EstadoPeticion.SinCorreoComuna)
                 {
-                    <span class="badge bg-warning text-dark" title="@envioTitulo" style="cursor:help">Sin correo comuna</span>
+                    <span class="badge bg-warning text-dark px-2 py-1" title="@envioTitulo" style="cursor:help">⚠ Sin correo comuna</span>
                 }
                 else if (p.Estado == EstadoPeticion.Error)
                 {
-                    <span class="badge bg-danger" title="@envioTitulo" style="cursor:help">Error</span>
+                    <span class="badge bg-danger text-white px-2 py-1" title="@envioTitulo" style="cursor:help">✕ Error</span>
                 }
                 else
                 {
-                    <span class="text-muted fw-normal">Sin enviar</span>
+                    <span class="badge bg-light text-secondary border px-2 py-1 fw-semibold">⏳ Sin enviar</span>
                 }
             </td>
             <td class="dato text-center">
@@ -125,12 +153,25 @@
             </td>
             <td class="dato text-center" title="@p.Origen" style="cursor:help">@p.Oficina</td>
             <td class="col-acciones">
-                <form method="post" class="d-inline">
-                    <input type="hidden" name="id" value="@p.Id" />
-                    <button asp-page-handler="Enviar" class="btn btn-sm btn-outline-primary"
-                            disabled="@(p.Estado == EstadoPeticion.Enviada ? "disabled" : null)">Enviar</button>
-                </form>
-                <a href="/Imprimir?id=@p.Id" target="_blank" class="btn btn-sm btn-outline-secondary" title="Imprimir esta persona">🖨</a>
+                @if (pendientesComuna > 0)
+                {
+                    var rutDudoso = Model.Peticiones.Any(x =>
+                        x.Comuna.Equals(p.Comuna, System.StringComparison.OrdinalIgnoreCase)
+                        && x.RutInvalido
+                        && x.Estado != EstadoPeticion.Enviada);
+                    var aviso = rutDudoso ? "\\n(incluye 1 o más con RUT NO validado)" : "";
+                    <form method="post" class="d-inline"
+                          onsubmit="return confirm('@p.Comuna: @pendientesComuna persona(s) pendiente(s).\nSe envía 1 correo con todas.@(aviso) ¿Continuar?');">
+                        <input type="hidden" name="id" value="@p.Id" />
+                        <button asp-page-handler="EnviarComuna" class="btn btn-sm btn-outline-primary">
+                            Enviar comuna (@pendientesComuna)
+                        </button>
+                    </form>
+                }
+                else
+                {
+                    <button class="btn btn-sm btn-success text-white" disabled title="Todos los correos de esta comuna ya fueron enviados">✓ Enviada</button>
+                }
                 <form method="post" class="d-inline" onsubmit="return confirm('¿Eliminar esta petición?');">
                     <input type="hidden" name="id" value="@p.Id" />
                     <button asp-page-handler="Eliminar" class="btn btn-sm btn-outline-danger">✕</button>
@@ -169,6 +210,7 @@
                   var fila = document.getElementById("fila-" + id);
                   if (fila) {
                       fila.classList.toggle("table-info", res.marcada);
+                      fila.classList.toggle("fila-marcada", res.marcada);
                   }
               }).catch(function () {
                   form.submit(); // si falla el fetch, envio normal

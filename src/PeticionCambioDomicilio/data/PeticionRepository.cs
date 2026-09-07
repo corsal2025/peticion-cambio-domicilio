@@ -6,13 +6,54 @@ namespace PeticionCambioDomicilio.Data;
 /// <summary>SQLite sin ORM (mismo enfoque que LicenciasCarpetas). Un archivo data/peticiones.db.</summary>
 public sealed class PeticionRepository
 {
+    private const int MaxBackups = 10;
+
     private readonly string _connectionString;
+    private readonly string _dbPath;
 
     public PeticionRepository(string dbPath)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+        _dbPath = dbPath;
         _connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
         Init();
+    }
+
+    /// <summary>
+    /// Copia el archivo de la base a <c>data/backups/</c> antes de una operación destructiva
+    /// (borrar todo, reimportar). Conserva los últimos <see cref="MaxBackups"/>. Nunca tira la
+    /// operación abajo: si el respaldo falla, se registra y se sigue.
+    /// </summary>
+    public string? Backup(string motivo)
+    {
+        try
+        {
+            if (!File.Exists(_dbPath))
+            {
+                return null;
+            }
+
+            var dir = Path.Combine(Path.GetDirectoryName(_dbPath)!, "backups");
+            Directory.CreateDirectory(dir);
+
+            var slug = new string(motivo.Where(char.IsLetterOrDigit).ToArray());
+            var destino = Path.Combine(dir, $"peticiones-{DateTime.Now:yyyyMMdd-HHmmss}-{slug}.db");
+            File.Copy(_dbPath, destino, overwrite: false);
+
+            foreach (var viejo in new DirectoryInfo(dir)
+                         .GetFiles("peticiones-*.db")
+                         .OrderByDescending(f => f.Name)
+                         .Skip(MaxBackups))
+            {
+                try { viejo.Delete(); } catch { /* respaldo viejo, no crítico */ }
+            }
+
+            return destino;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private void Init()
@@ -138,7 +179,12 @@ public sealed class PeticionRepository
     {
         using var cn = Open();
         using var cmd = cn.CreateCommand();
-        cmd.CommandText = "SELECT * FROM Peticion ORDER BY OrdenImportacion ASC, Id ASC;";
+        cmd.CommandText = """
+            SELECT * FROM Peticion
+             ORDER BY CASE WHEN Estado = 1 THEN 1 ELSE 0 END ASC,
+                      OrdenImportacion ASC,
+                      Id ASC;
+            """;
         using var reader = cmd.ExecuteReader();
         var result = new List<Peticion>();
         while (reader.Read())

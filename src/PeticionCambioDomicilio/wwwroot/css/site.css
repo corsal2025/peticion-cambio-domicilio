@@ -63,3 +63,50 @@ h1.h3 { font-size: 1.25rem; }
 
 .navbar-brand { font-size: 1rem; }
 .nav-link { font-size: .88rem; }
+
+/* --- Distinción visual de estados de envío --- */
+.table > tbody > tr.fila-enviada {
+  background-color: #e8f5e9 !important;
+  border-left: 4px solid #2e7d32;
+}
+.table > tbody > tr.fila-enviada:hover {
+  background-color: #d7edd9 !important;
+}
+.table > tbody > tr.fila-enviada td {
+  background-color: transparent !important;
+}
+
+.table > tbody > tr.fila-pendiente {
+  background-color: #ffffff;
+}
+.table > tbody > tr.fila-pendiente:hover {
+  background-color: #f8f9fa !important;
+}
+
+.table > tbody > tr.fila-sincorreo {
+  background-color: #fff9db !important;
+  border-left: 4px solid #f59f00;
+}
+.table > tbody > tr.fila-sincorreo td {
+  background-color: transparent !important;
+}
+
+.table > tbody > tr.fila-error {
+  background-color: #ffebee !important;
+  border-left: 4px solid #d32f2f;
+}
+.table > tbody > tr.fila-error td {
+  background-color: transparent !important;
+}
+
+.table > tbody > tr.fila-marcada {
+  background-color: #e1f5fe !important;
+  border-left: 4px solid #0288d1;
+}
+.table > tbody > tr.fila-marcada:hover {
+  background-color: #b3e5fc !important;
+}
+.table > tbody > tr.fila-marcada td {
+  background-color: transparent !important;
+}
+

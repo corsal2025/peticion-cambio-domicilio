@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Xml.Linq;
@@ -14,15 +15,19 @@ public interface IMailSender
 
 /// <summary>
 /// Transporte SOAP mínimo contra el EWS on-premises de Exchange. Solo envía correo
-/// (CreateItem / SendAndSaveCopy). Basic auth sobre TLS. Reintenta fallos transitorios.
+/// (CreateItem / SendAndSaveCopy). Basic auth sobre TLS.
 /// Portado de LicenciasCarpetas/CambioDomicilio/Ews/* recortado a lo que esta app usa.
+///
+/// Reintenta SOLO fallos transitorios (servidor sobrecargado o caído un momento) y cortes de
+/// red. Un 401/403 corta al primer intento y lanza <see cref="EwsAuthException"/>: reintentar
+/// credenciales rechazadas solo acelera el bloqueo de la cuenta de dominio.
 /// </summary>
 public sealed class EwsMailSender : IMailSender, IDisposable
 {
     private static readonly XNamespace Soap = "http://schemas.xmlsoap.org/soap/envelope/";
     private static readonly XNamespace T = "http://schemas.microsoft.com/exchange/services/2006/types";
     private static readonly XNamespace M = "http://schemas.microsoft.com/exchange/services/2006/messages";
-    private static readonly int[] TransientStatusCodes = [408, 429, 500, 502, 503, 504];
+    private const int MaxAttempts = 4;
 
     private readonly EwsOptions? _ews;
     private readonly string? _sendAs;
@@ -47,7 +52,7 @@ public sealed class EwsMailSender : IMailSender, IDisposable
     {
         if (_http is null || _ews?.Url is null)
         {
-            throw new InvalidOperationException(
+            throw new EwsSendException(
                 "Falta configurar Peticion:Ews (Url/Username/Password) en appsettings.Local.json.");
         }
 
@@ -60,7 +65,6 @@ public sealed class EwsMailSender : IMailSender, IDisposable
     {
         var attempt = 0;
         var delay = TimeSpan.FromSeconds(2);
-        const int maxAttempts = 4;
 
         while (true)
         {
@@ -70,22 +74,69 @@ public sealed class EwsMailSender : IMailSender, IDisposable
                 using var content = new StringContent(soap, Encoding.UTF8, "text/xml");
                 using var response = await _http!.PostAsync(url, content, cancellationToken);
 
-                if (TransientStatusCodes.Contains((int)response.StatusCode) && attempt < maxAttempts)
+                switch (EwsRetryPolicy.Classify(response.StatusCode))
                 {
-                    await Task.Delay(delay, cancellationToken);
-                    delay *= 2;
-                    continue;
-                }
+                    case EwsAction.Accept:
+                        var xml = await response.Content.ReadAsStringAsync(cancellationToken);
+                        return XDocument.Parse(xml);
 
-                response.EnsureSuccessStatusCode();
-                var xml = await response.Content.ReadAsStringAsync(cancellationToken);
-                return XDocument.Parse(xml);
+                    case EwsAction.FailAuth:
+                        throw new EwsAuthException(
+                            $"Exchange rechazó las credenciales (HTTP {(int)response.StatusCode}). " +
+                            "Revisá Peticion:Ews:Username y Password en appsettings.Local.json. " +
+                            "El usuario que funciona tiene formato servervalpo\\cambiodedomicilio. " +
+                            "No repitas el envío a ciegas: cada rechazo suma al bloqueo de la cuenta.");
+
+                    case EwsAction.Retry when attempt < MaxAttempts:
+                        await Task.Delay(delay, cancellationToken);
+                        delay *= 2;
+                        continue;
+
+                    case EwsAction.Retry:
+                        throw new EwsSendException(
+                            $"Exchange no respondió tras {MaxAttempts} intentos (último: HTTP {(int)response.StatusCode}). " +
+                            "Probá de nuevo en unos minutos.");
+
+                    default: // FailPermanent
+                        var cuerpo = await SafeReadBody(response, cancellationToken);
+                        throw new EwsSendException(
+                            $"Exchange devolvió HTTP {(int)response.StatusCode}{cuerpo}.");
+                }
             }
-            catch (HttpRequestException) when (attempt < maxAttempts)
+            catch (Exception ex) when (IsNetwork(ex) && attempt < MaxAttempts)
             {
                 await Task.Delay(delay, cancellationToken);
                 delay *= 2;
             }
+            catch (Exception ex) when (IsNetwork(ex))
+            {
+                throw new EwsSendException(
+                    $"No se pudo alcanzar Exchange tras {MaxAttempts} intentos: {ex.Message}. " +
+                    "¿Hay red municipal / VPN?", ex);
+            }
+        }
+    }
+
+    /// <summary>Fallos de transporte (DNS, conexión, timeout) que sí conviene reintentar.</summary>
+    private static bool IsNetwork(Exception ex) =>
+        ex is HttpRequestException or System.Net.Sockets.SocketException
+            || (ex is TaskCanceledException tce && tce.InnerException is TimeoutException);
+
+    private static async Task<string> SafeReadBody(HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            var text = (await response.Content.ReadAsStringAsync(ct)).Trim();
+            if (text.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            return " — " + (text.Length > 300 ? text[..300] + "…" : text);
+        }
+        catch
+        {
+            return string.Empty;
         }
     }
 
@@ -98,7 +149,15 @@ public sealed class EwsMailSender : IMailSender, IDisposable
         {
             var code = responseMessage.Element(M + "ResponseCode")?.Value ?? "desconocido";
             var text = responseMessage.Element(M + "MessageText")?.Value;
-            throw new InvalidOperationException($"EWS CreateItem falló: {code}{(text is null ? "" : $" — {text}")}");
+
+            if (code is "ErrorAccessDenied" or "ErrorImpersonateUserDenied" or "ErrorSendAsDenied")
+            {
+                throw new EwsAuthException(
+                    $"EWS rechazó el envío por permisos ({code}{(text is null ? "" : $" — {text}")}). " +
+                    "Si usás SendAsAddress, la cuenta autenticada necesita permiso \"Send As\" sobre ese buzón.");
+            }
+
+            throw new EwsSendException($"EWS CreateItem falló: {code}{(text is null ? "" : $" — {text}")}");
         }
     }
 

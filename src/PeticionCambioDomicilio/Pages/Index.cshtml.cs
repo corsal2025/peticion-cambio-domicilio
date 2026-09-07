@@ -11,6 +11,9 @@ namespace PeticionCambioDomicilio.Pages;
 
 public sealed class IndexModel : PageModel
 {
+    /// <summary>Pausa entre comunas en el envío masivo, para no gatillar el antispam de Exchange.</summary>
+    private static readonly TimeSpan PausaEntreComunas = TimeSpan.FromSeconds(2);
+
     private readonly PeticionRepository _repository;
     private readonly ExcelPeticionImporter _importer;
     private readonly PeticionSender _sender;
@@ -41,7 +44,22 @@ public sealed class IndexModel : PageModel
     public int ComunasEnDirectorio => _directory.Count;
     public string? ModoPruebaEmail => string.IsNullOrWhiteSpace(_options.TestModeEmail) ? null : _options.TestModeEmail;
 
-    public void OnGet() => Peticiones = _repository.All();
+    /// <summary>Comunas con peticiones pendientes y sin correo en el directorio — hay que cargarlas.</summary>
+    public IReadOnlyList<string> ComunasSinCorreo { get; private set; } = Array.Empty<string>();
+
+    /// <summary>Peticiones pendientes (no enviadas) por comuna, para etiquetar el botón "Enviar comuna (N)".</summary>
+    public IReadOnlyDictionary<string, int> PendientesPorComuna { get; private set; } =
+        new Dictionary<string, int>();
+
+    public void OnGet()
+    {
+        Peticiones = _repository.All();
+        ComunasSinCorreo = _sender.ComunasPendientesSinCorreo();
+        PendientesPorComuna = Peticiones
+            .Where(p => p.Estado is EstadoPeticion.Borrador or EstadoPeticion.SinCorreoComuna or EstadoPeticion.Error)
+            .GroupBy(p => p.Comuna, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+    }
 
     public IActionResult OnPostImportar()
     {
@@ -50,6 +68,8 @@ public sealed class IndexModel : PageModel
             TempData["Flash"] = "Configura la ruta del Excel en Configuración antes de importar.";
             return RedirectToPage();
         }
+
+        _repository.Backup("import");
 
         try
         {
@@ -77,38 +97,60 @@ public sealed class IndexModel : PageModel
         return RedirectToPage();
     }
 
-    public async Task<IActionResult> OnPostEnviar(long id)
+    /// <summary>Envía en UN correo todas las pendientes de la comuna de esa fila.</summary>
+    public async Task<IActionResult> OnPostEnviarComuna(long id)
     {
-        var result = await _sender.SendAsync(id, HttpContext.RequestAborted);
+        var p = _repository.Get(id);
+        if (p is null)
+        {
+            TempData["Flash"] = "La petición ya no existe.";
+            return RedirectToPage();
+        }
+
+        var result = await _sender.SendComunaAsync(p.Comuna, HttpContext.RequestAborted);
         TempData["Flash"] = result.Mensaje;
         return RedirectToPage();
     }
 
     public async Task<IActionResult> OnPostEnviarTodas()
     {
-        var pendientes = _repository.All()
+        var comunas = _repository.All()
             .Where(p => p.Estado is EstadoPeticion.Borrador or EstadoPeticion.SinCorreoComuna or EstadoPeticion.Error)
+            .Select(p => p.Comuna)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(c => c, StringComparer.CurrentCulture)
             .ToList();
 
-        int ok = 0, fail = 0;
-        foreach (var p in pendientes)
+        int correos = 0, personas = 0, sinCorreo = 0, conError = 0;
+        var primera = true;
+        foreach (var comuna in comunas)
         {
-            var result = await _sender.SendAsync(p.Id, HttpContext.RequestAborted);
-            if (result.Estado == EstadoPeticion.Enviada)
+            if (!primera)
             {
-                ok++;
+                await Task.Delay(PausaEntreComunas, HttpContext.RequestAborted);
             }
-            else
+
+            primera = false;
+            var result = await _sender.SendComunaAsync(comuna, HttpContext.RequestAborted);
+            switch (result.Estado)
             {
-                fail++;
+                case EstadoPeticion.Enviada:
+                    correos++;
+                    personas += result.Personas;
+                    break;
+                case EstadoPeticion.SinCorreoComuna:
+                    sinCorreo++;
+                    break;
+                default:
+                    conError++;
+                    break;
             }
         }
 
-        TempData["Flash"] = $"Enviadas: {ok} · Con problema: {fail}.";
+        TempData["Flash"] = $"Correos enviados: {correos} ({personas} persona/s) · " +
+                            $"Comunas sin correo: {sinCorreo} · Con error: {conError}.";
         return RedirectToPage();
     }
-
-
 
     public IActionResult OnPostEstadoCarpeta(long id, string estado)
     {
@@ -138,11 +180,14 @@ public sealed class IndexModel : PageModel
         return RedirectToPage();
     }
 
-    /// <summary>Borra TODAS las peticiones. La confirmacion la hace la pantalla.</summary>
+    /// <summary>Borra TODAS las peticiones. La confirmacion la hace la pantalla. Respalda antes.</summary>
     public IActionResult OnPostBorrarTodo()
     {
+        var backup = _repository.Backup("borrartodo");
         var n = _repository.DeleteAll();
-        TempData["Flash"] = $"Se borraron {n} peticion(es). El Excel no se toca; podes reimportar cuando quieras.";
+        TempData["Flash"] = backup is not null
+            ? $"Se borraron {n} petición(es). Respaldo guardado en {backup}. Reimportá del Excel cuando quieras."
+            : $"Se borraron {n} petición(es). ATENCIÓN: no se pudo guardar respaldo. El historial de envío se perdió.";
         return RedirectToPage();
     }
 

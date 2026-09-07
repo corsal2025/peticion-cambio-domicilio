@@ -1,6 +1,8 @@
 bin/
 obj/
-data/*.db
-data/*.db-*
+*.log
+**/data/*.db
+**/data/*.db-*
 appsettings.Local.json
 publish/
+.atl/

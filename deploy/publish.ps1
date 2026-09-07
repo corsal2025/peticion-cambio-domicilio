@@ -37,9 +37,15 @@ if (Test-Path $localConfig) {
     Write-Warning "No hay appsettings.Local.json: la app arrancara sin correo EWS configurado."
 }
 
+# Copia instalador para pendrive
+Copy-Item (Join-Path $PSScriptRoot "INSTALAR.bat") (Join-Path $publishPath "INSTALAR.bat") -Force
+Copy-Item (Join-Path $PSScriptRoot "instalar.ps1") (Join-Path $publishPath "instalar.ps1") -Force
+Write-Host "Instalador de pendrive (INSTALAR.bat) copiado al publish." -ForegroundColor Green
+
 Write-Host ""
 Write-Host "Publicado en: $publishPath" -ForegroundColor Green
 Write-Host "Ejecutable:   $(Join-Path $publishPath 'PeticionCambioDomicilio.exe')"
 
 # Siempre regenera el lanzador (vive dentro de publish/ y se borra al republicar).
 & (Join-Path $PSScriptRoot "create-desktop-shortcut.ps1") -PublishPath $publishPath
+

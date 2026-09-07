@@ -1,0 +1,21 @@
+======================================================================
+     INSTRUCCIONES: PETICION DE CAMBIO DE DOMICILIO EN RED
+======================================================================
+
+1. EN TU COMPUTADOR (PC PRINCIPAL / SERVIDOR):
+   - Haz clic derecho en INSTALAR.bat -> "Ejecutar como administrador".
+   - Elige la Opcion [1] (PC PRINCIPAL).
+   - Esto configura el sistema, abre el puerto en el firewall y arranca
+     el servidor para toda la red de la oficina.
+
+2. EN LOS COMPUTADORES DE TUS DOS COMPANEROS:
+   - Conecta este mismo pendrive en sus computadores.
+   - Haz doble clic en INSTALAR.bat.
+   - Elige la Opcion [2] (PUESTO DE TRABAJO).
+   - El instalador leera automaticamente la IP (192.168.16.80) desde
+     este pendrive. Solo presiona ENTER.
+   - Les creara el acceso directo en su Escritorio y abrira el sistema.
+
+Listo: Todos trabajaran sincronizados en tiempo real sobre la misma
+base de datos central, sin duplicar correos ni pisarse las tareas.
+======================================================================
