@@ -320,4 +320,38 @@ code {
   font-size: .82em;
 }
 
+/* ---------- Estadísticas: barras ---------- */
+.barra-track {
+  height: 15px;
+  border-radius: 4px;
+  background: #eeede7;
+  overflow: hidden;
+}
+.barra-track > i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+  min-width: 3px;
+}
+.barra-split {
+  display: flex;
+  height: 20px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #eeede7;
+}
+.barra-split > i { display: block; height: 100%; }
+.barra-split .s-ok, .cuadro.s-ok { background: var(--ok-ink); }
+.barra-split .s-bad, .cuadro.s-bad { background: var(--warn-ink); }
+.barra-split .s-idle { background: var(--line-strong); }
+.cuadro {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 3px;
+  margin-right: .35rem;
+  vertical-align: baseline;
+}
+.cuadro.s-idle { background: var(--line-strong); }
+
 pre { font-size: .82rem; }
