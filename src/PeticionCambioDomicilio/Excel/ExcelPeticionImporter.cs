@@ -50,6 +50,108 @@ public sealed class ExcelPeticionImporter
         return ImportCore(loaded.Workbook, avisos, addIfNew, existentes, borrar, sincronizarCarpeta);
     }
 
+    /// <summary>
+    /// Pasada liviana: recorre TODO el libro buscando, por RUT (o por nombre si el RUT no valida),
+    /// el estado de la carpeta de cada petición que ya tenemos. Si en el Excel figura más avanzada
+    /// que en la app, la sincroniza (y anota la fecha de subida). No crea ni borra nada.
+    /// Devuelve cuántas carpetas cambiaron.
+    /// </summary>
+    public int ActualizarEstadosCarpeta(
+        string excelPath,
+        IReadOnlyList<Peticion> peticiones,
+        Func<long, string, DateOnly?, bool> sincronizarCarpeta)
+    {
+        using var loaded = LoadedWorkbook.Open(excelPath);
+        var ignoradas = _options.HojasIgnoradas.Select(TextNormalization.Fold).ToArray();
+
+        // clave (rut o nombre) -> el estado MÁS avanzado que aparezca para esa persona en el libro
+        var enExcel = new Dictionary<string, (string Estado, DateOnly? Fecha, int Rango)>(StringComparer.Ordinal);
+
+        foreach (var sheet in loaded.Workbook.Worksheets)
+        {
+            var folded = TextNormalization.Fold(sheet.Name);
+            if (ignoradas.Any(ig => folded.Contains(ig)))
+            {
+                continue;
+            }
+
+            var used = sheet.RangeUsed();
+            if (used is null)
+            {
+                continue;
+            }
+
+            var (headerRow, headers) = FindHeaderRow(used);
+            if (headerRow is null)
+            {
+                continue;
+            }
+
+            int? Col(string name) =>
+                headers.TryGetValue(TextNormalization.Fold(name), out var c) ? c : null;
+
+            var cNombre = Col(_options.Columns.NombreCompleto);
+            var cRut = Col(_options.Columns.Rut);
+            var cEstado = Col(_options.Columns.EstadoCarpeta)
+                          ?? (Col("DECISION FINAL") is > 1 ? Col("DECISION FINAL") - 1 : null);
+            var cFechaSubida = Col(_options.Columns.FechaSubidaCarpeta);
+            if (cRut is null || cEstado is null)
+            {
+                continue;
+            }
+
+            foreach (var row in used.Rows())
+            {
+                if (row.RowNumber() <= headerRow.Value || row.Cell(cRut.Value).IsEmpty())
+                {
+                    continue;
+                }
+
+                var estadoCrudo = row.Cell(cEstado.Value).GetString();
+                var rango = EstadoCarpetaCatalog.Rango(estadoCrudo);
+                if (rango < 2)
+                {
+                    continue; // solo lo que puede hacer avanzar
+                }
+
+                var rutRaw = row.Cell(cRut.Value).GetString().Trim();
+                var nombre = cNombre is null ? "" : row.Cell(cNombre.Value).GetString().Trim();
+                var rn = RutValidator.NormalizeAndValidate(rutRaw);
+                var clave = rn is not null ? "rut:" + rn : "nom:" + TextNormalization.Fold(nombre);
+                if (clave is "nom:")
+                {
+                    continue;
+                }
+
+                var fecha = cFechaSubida is null ? null : ReadDate(row.Cell(cFechaSubida.Value));
+                if (!enExcel.TryGetValue(clave, out var actual) || rango > actual.Rango)
+                {
+                    enExcel[clave] = (estadoCrudo, fecha, rango);
+                }
+            }
+        }
+
+        var cambiadas = 0;
+        foreach (var p in peticiones)
+        {
+            var clave = !p.RutInvalido ? "rut:" + p.Rut : "nom:" + TextNormalization.Fold(p.NombreCompleto);
+            if (!enExcel.TryGetValue(clave, out var hit))
+            {
+                continue;
+            }
+
+            var subida = hit.Rango >= 3
+                ? (hit.Fecha ?? DateOnly.FromDateTime(DateTime.Today))
+                : (DateOnly?)null;
+            if (sincronizarCarpeta(p.Id, hit.Estado, subida))
+            {
+                cambiadas++;
+            }
+        }
+
+        return cambiadas;
+    }
+
     private ImportResult ImportCore(
         XLWorkbook workbook,
         List<string> avisos,

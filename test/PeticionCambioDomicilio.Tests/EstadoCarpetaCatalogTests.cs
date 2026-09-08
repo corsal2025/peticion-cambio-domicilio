@@ -40,4 +40,17 @@ public class EstadoCarpetaCatalogTests
         Assert.Equal(comuna, EstadoCarpetaCatalog.SubidaPorComuna(estado));
         Assert.Equal(nosotros, EstadoCarpetaCatalog.SubidaPorNosotros(estado));
     }
+
+    [Theory]
+    [InlineData("CAMBIO DE DOMICILIO", "CAMBIO DE DOMICILIO SOLICITADO")]
+    [InlineData("CAMBIO DE DOMICILIO SOLICITADO", "CAMBIO DE DOMICILIO SOLICITADO")]
+    [InlineData("SUBIDA A CONASET", "CAMBIO DOM. SUBIDO A CONASET")]
+    [InlineData("CAMBIO DOM. SUBIDO A CONASET", "CAMBIO DOM. SUBIDO A CONASET")]
+    [InlineData("SUBIDA CON F8", "CAMBIO DOM. SUBIDO CON CORREO")]
+    [InlineData("SUBIDA CON OFICIO", "CAMBIO DOM. SUBIDO CON CORREO")]
+    [InlineData("CAMBIO DOM. SUBIDO CON CORREO", "CAMBIO DOM. SUBIDO CON CORREO")]
+    public void OpcionDashboard_colapsa_a_tres_situaciones(string estado, string esperado)
+    {
+        Assert.Equal(esperado, EstadoCarpetaCatalog.OpcionDashboard(estado));
+    }
 }

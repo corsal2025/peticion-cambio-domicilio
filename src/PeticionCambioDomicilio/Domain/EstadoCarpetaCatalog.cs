@@ -60,6 +60,32 @@ public static class EstadoCarpetaCatalog
     public static bool SubidaPorNosotros(string? estado) => estado is
         "CAMBIO DOM. SUBIDO CON CORREO" or "SUBIDA CON F8" or "SUBIDA CON OFICIO";
 
+    // --- Vista del dashboard: solo interesan tres situaciones ---
+    public const string SinSubir = "CAMBIO DE DOMICILIO SOLICITADO";
+    public const string SubidaConaset = "CAMBIO DOM. SUBIDO A CONASET";
+    public const string SubidaCorreo = "CAMBIO DOM. SUBIDO CON CORREO";
+
+    /// <summary>Las tres opciones del desplegable de la tabla, en orden.</summary>
+    public static readonly IReadOnlyList<string> OpcionesDashboard = new[]
+    {
+        SinSubir, SubidaConaset, SubidaCorreo,
+    };
+
+    /// <summary>
+    /// Colapsa cualquier estado de carpeta a una de las tres opciones del dashboard:
+    /// "sin subir", subida a CONASET (la puso la comuna) o subida con correo (la pusimos nosotros,
+    /// incluye F8 y oficio).
+    /// </summary>
+    public static string OpcionDashboard(string? estado)
+    {
+        if (Rango(estado) < 3)
+        {
+            return SinSubir;
+        }
+
+        return SubidaPorComuna(estado) ? SubidaConaset : SubidaCorreo;
+    }
+
     public static string Normalizar(string? crudo)
     {
         var f = TextNormalization.Fold(crudo);

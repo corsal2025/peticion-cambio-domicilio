@@ -60,6 +60,12 @@
     <form method="post">
         <button asp-page-handler="Importar" class="btn btn-sm btn-primary">Importar / actualizar desde Excel</button>
     </form>
+    <form method="post">
+        <button asp-page-handler="ActualizarCarpetas" class="btn btn-sm btn-outline-primary"
+                title="Busca en el libro el estado de la carpeta de cada persona (por RUT) y lo actualiza si figura más avanzado">
+            Actualizar carpetas desde el Excel
+        </button>
+    </form>
     <form method="post" onsubmit="return confirm('Se envía UN correo por comuna con las personas MARCADAS (✓) de esa comuna@(Model.ModoPruebaEmail is null ? "" : " (MODO PRUEBA: nada llega a las municipalidades)"). ¿Continuar?');">
         <button asp-page-handler="EnviarMarcadas" class="btn btn-sm btn-outline-primary"
                 disabled="@(Model.MarcadasPendientes == 0 ? "disabled" : null)">
@@ -169,12 +175,21 @@
                 }
             </td>
             <td>
+                @{
+                    var opcionActual = EstadoCarpetaCatalog.OpcionDashboard(p.EstadoCarpeta);
+                    string EtiquetaCarpeta(string v) => v switch
+                    {
+                        EstadoCarpetaCatalog.SubidaConaset => "Subida a CONASET",
+                        EstadoCarpetaCatalog.SubidaCorreo => "Subida con correo",
+                        _ => "— sin subir —",
+                    };
+                }
                 <form method="post" asp-page-handler="EstadoCarpeta" class="carpeta-form d-inline">
                     <input type="hidden" name="id" value="@p.Id" />
-                    <select name="estado" class="carpeta-select" title="Cambiar el estado de la carpeta" onchange="this.form.submit()">
-                        @foreach (var v in EstadoCarpetaCatalog.Valores)
+                    <select name="estado" class="carpeta-select" title="Estado de la carpeta" onchange="this.form.submit()">
+                        @foreach (var v in EstadoCarpetaCatalog.OpcionesDashboard)
                         {
-                            <option value="@v" selected="@(p.EstadoCarpeta == v ? "selected" : null)">@v</option>
+                            <option value="@v" selected="@(opcionActual == v ? "selected" : null)">@EtiquetaCarpeta(v)</option>
                         }
                     </select>
                 </form>

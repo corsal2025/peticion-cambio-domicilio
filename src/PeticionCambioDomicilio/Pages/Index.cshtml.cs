@@ -176,6 +176,36 @@ public sealed class IndexModel : PageModel
         return RedirectToPage();
     }
 
+    /// <summary>
+    /// Busca en TODO el libro (por RUT, o por nombre si el RUT no valida) el estado de la carpeta
+    /// de cada petición y lo sincroniza si en el Excel figura más avanzado. No importa filas nuevas.
+    /// </summary>
+    public IActionResult OnPostActualizarCarpetas()
+    {
+        if (!ExcelConfigurado)
+        {
+            TempData["Flash"] = "Configura la ruta del Excel en Configuración antes de actualizar.";
+            return RedirectToPage();
+        }
+
+        _repository.Backup("actualizar-carpetas");
+
+        try
+        {
+            var n = _importer.ActualizarEstadosCarpeta(
+                _options.ExcelPath!, _repository.All(), _repository.SincronizarCarpetaDesdeExcel);
+            TempData["Flash"] = n > 0
+                ? $"{n} carpeta(s) actualizada(s) desde el Excel."
+                : "Ninguna carpeta cambió — en el Excel están igual o menos avanzadas que acá.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Flash"] = $"Error leyendo el Excel: {ex.Message}";
+        }
+
+        return RedirectToPage();
+    }
+
     public IActionResult OnPostEstadoCarpeta(long id, string estado)
     {
         if (Domain.EstadoCarpetaCatalog.Valores.Contains(estado))
