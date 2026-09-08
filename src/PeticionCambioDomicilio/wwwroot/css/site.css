@@ -195,16 +195,17 @@ main { padding-top: 1.4rem; }
   margin-bottom: 0;
 }
 .table > thead > tr > th {
-  font-size: .68rem;
-  font-weight: 600;
+  font-size: .92rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .05em;
-  color: var(--ink-faint);
+  letter-spacing: .02em;
+  color: var(--ink);
   white-space: nowrap;
   vertical-align: bottom;
-  background: #fafaf8;
-  border-bottom: 1px solid var(--line-strong);
-  padding: .55rem .7rem;
+  text-align: center;
+  background: #f1f1ec;
+  border-bottom: 2px solid var(--line-strong);
+  padding: .6rem .7rem;
 }
 .table > tbody > tr { border-bottom: 1px solid var(--line); }
 .table > tbody > tr:last-child { border-bottom: 0; }
@@ -257,18 +258,26 @@ main { padding-top: 1.4rem; }
 .plazo--bad .plazo-bar > i { background: var(--bad-rail); }   .plazo--bad .plazo-txt { color: var(--bad-ink); font-weight: 600; }
 .plazo--idle .plazo-txt { color: var(--ink-faint); }
 
-/* ---------- Estados de fila (riel + tinte) ---------- */
-.table > tbody > tr.fila-pendiente > td { box-shadow: inset 3px 0 0 var(--line-strong); }
+/* ---------- Estados de fila (riel a la izquierda + tinte) ---------- */
+/* El riel va SOLO en la primera celda; si no, se dibujan lineas verticales en cada columna. */
+.table > tbody > tr.fila-pendiente > td:first-child { box-shadow: inset 3px 0 0 var(--line-strong); }
 .table > tbody > tr.fila-pendiente:hover > td { background: #fafaf8 !important; }
 
-.table > tbody > tr.fila-enviada > td { background: var(--ok-bg) !important; box-shadow: inset 3px 0 0 var(--ok-rail); }
+.table > tbody > tr.fila-enviada > td { background: var(--ok-bg) !important; }
+.table > tbody > tr.fila-enviada > td:first-child { box-shadow: inset 3px 0 0 var(--ok-rail); }
 .table > tbody > tr.fila-enviada:hover > td { background: #dcecdf !important; }
 
-.table > tbody > tr.fila-sincorreo > td { background: var(--warn-bg) !important; box-shadow: inset 3px 0 0 var(--warn-rail); }
-.table > tbody > tr.fila-error > td { background: var(--bad-bg) !important; box-shadow: inset 3px 0 0 var(--bad-rail); }
-.table > tbody > tr.fila-rutinvalido > td { background: var(--warn-bg) !important; box-shadow: inset 3px 0 0 var(--warn-rail); }
+.table > tbody > tr.fila-sincorreo > td { background: var(--warn-bg) !important; }
+.table > tbody > tr.fila-sincorreo > td:first-child { box-shadow: inset 3px 0 0 var(--warn-rail); }
 
-.table > tbody > tr.fila-marcada > td { background: var(--mark-bg) !important; box-shadow: inset 3px 0 0 var(--mark-rail); }
+.table > tbody > tr.fila-error > td { background: var(--bad-bg) !important; }
+.table > tbody > tr.fila-error > td:first-child { box-shadow: inset 3px 0 0 var(--bad-rail); }
+
+.table > tbody > tr.fila-rutinvalido > td { background: var(--warn-bg) !important; }
+.table > tbody > tr.fila-rutinvalido > td:first-child { box-shadow: inset 3px 0 0 var(--warn-rail); }
+
+.table > tbody > tr.fila-marcada > td { background: var(--mark-bg) !important; }
+.table > tbody > tr.fila-marcada > td:first-child { box-shadow: inset 3px 0 0 var(--mark-rail); }
 .table > tbody > tr.fila-marcada:hover > td { background: #d4e7ec !important; }
 
 /* ---------- Directorio de comunas / config ---------- */
