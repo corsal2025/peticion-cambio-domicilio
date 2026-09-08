@@ -229,7 +229,13 @@ app.MapRazorPages();
 // Doble clic en el acceso directo: abre la pestaña sola una vez que Kestrel ya escucha.
 if (args.Contains("--open-browser"))
 {
-    var url = app.Configuration["Kestrel:Endpoints:Http:Url"] ?? "http://localhost:5020";
+    // El endpoint de escucha suele ser http://*:5020 (todas las interfaces, para la LAN).
+    // El navegador necesita un host real: se navega SIEMPRE a localhost, tomando solo el puerto.
+    var escucha = (app.Configuration["Kestrel:Endpoints:Http:Url"] ?? "http://localhost:5020")
+        .Replace("//*", "//localhost").Replace("//+", "//localhost")
+        .Replace("//[::]", "//localhost").Replace("//0.0.0.0", "//localhost");
+    var puerto = Uri.TryCreate(escucha, UriKind.Absolute, out var u) ? u.Port : 5020;
+    var url = $"http://localhost:{puerto}";
     _ = Task.Run(async () =>
     {
         await Task.Delay(TimeSpan.FromSeconds(2));
