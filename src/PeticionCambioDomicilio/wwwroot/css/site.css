@@ -214,9 +214,13 @@ main { padding-top: 1.4rem; }
   vertical-align: middle;
   white-space: nowrap;
   border: 0;
+  text-align: center;
 }
+/* Nombre (2da columna) queda alineado a la izquierda — es texto largo. */
+.table > tbody > tr > td:nth-child(2) { text-align: left; }
+.table > tbody > tr > td .plazo { margin: 0 auto; }
 .table > tbody > tr > td.dato { font-weight: 600; }
-.table > tbody > tr > td.col-acciones { white-space: nowrap; text-align: right; }
+.table > tbody > tr > td.col-acciones { white-space: nowrap; }
 .table-hover > tbody > tr:hover > td { background: transparent; }
 
 .comuna-chip {
