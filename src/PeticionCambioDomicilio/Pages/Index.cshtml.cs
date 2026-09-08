@@ -51,14 +51,21 @@ public sealed class IndexModel : PageModel
     public IReadOnlyDictionary<string, int> PendientesPorComuna { get; private set; } =
         new Dictionary<string, int>();
 
+    /// <summary>Marcadas (columna ✓) que todavía no se enviaron — para el botón "Enviar marcadas (N)".</summary>
+    public int MarcadasPendientes { get; private set; }
+
+    private static bool EsPendiente(Peticion p) =>
+        p.Estado is EstadoPeticion.Borrador or EstadoPeticion.SinCorreoComuna or EstadoPeticion.Error;
+
     public void OnGet()
     {
         Peticiones = _repository.All();
         ComunasSinCorreo = _sender.ComunasPendientesSinCorreo();
         PendientesPorComuna = Peticiones
-            .Where(p => p.Estado is EstadoPeticion.Borrador or EstadoPeticion.SinCorreoComuna or EstadoPeticion.Error)
+            .Where(EsPendiente)
             .GroupBy(p => p.Comuna, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+        MarcadasPendientes = Peticiones.Count(p => p.Marcada && EsPendiente(p));
     }
 
     public IActionResult OnPostImportar()
@@ -112,10 +119,25 @@ public sealed class IndexModel : PageModel
         return RedirectToPage();
     }
 
-    public async Task<IActionResult> OnPostEnviarTodas()
+    /// <summary>
+    /// Envía SOLO las peticiones marcadas (columna ✓) que estén pendientes. Sigue la regla de
+    /// siempre: UN correo por comuna, con las marcadas de esa comuna. Las que ya están enviadas
+    /// nunca se reenvían.
+    /// </summary>
+    public async Task<IActionResult> OnPostEnviarMarcadas()
     {
-        var comunas = _repository.All()
-            .Where(p => p.Estado is EstadoPeticion.Borrador or EstadoPeticion.SinCorreoComuna or EstadoPeticion.Error)
+        var marcadasPendientes = _repository.All()
+            .Where(p => p.Marcada && EsPendiente(p))
+            .ToList();
+
+        if (marcadasPendientes.Count == 0)
+        {
+            TempData["Flash"] = "No hay peticiones marcadas pendientes de envío. Marcá las filas con la casilla ✓.";
+            return RedirectToPage();
+        }
+
+        var ids = marcadasPendientes.Select(p => p.Id).ToHashSet();
+        var comunas = marcadasPendientes
             .Select(p => p.Comuna)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(c => c, StringComparer.CurrentCulture)
@@ -131,7 +153,7 @@ public sealed class IndexModel : PageModel
             }
 
             primera = false;
-            var result = await _sender.SendComunaAsync(comuna, HttpContext.RequestAborted);
+            var result = await _sender.SendComunaAsync(comuna, HttpContext.RequestAborted, ids);
             switch (result.Estado)
             {
                 case EstadoPeticion.Enviada:
@@ -147,7 +169,7 @@ public sealed class IndexModel : PageModel
             }
         }
 
-        TempData["Flash"] = $"Correos enviados: {correos} ({personas} persona/s) · " +
+        TempData["Flash"] = $"Marcadas enviadas — Correos: {correos} ({personas} persona/s) · " +
                             $"Comunas sin correo: {sinCorreo} · Con error: {conError}.";
         return RedirectToPage();
     }

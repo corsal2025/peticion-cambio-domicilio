@@ -52,8 +52,11 @@
     <form method="post">
         <button asp-page-handler="Importar" class="btn btn-sm btn-primary">Importar / actualizar desde Excel</button>
     </form>
-    <form method="post" onsubmit="return confirm('Se envía UN correo por comuna con todas sus personas pendientes@(Model.ModoPruebaEmail is null ? "" : " (MODO PRUEBA: nada llega a las municipalidades)"). ¿Continuar?');">
-        <button asp-page-handler="EnviarTodas" class="btn btn-sm btn-outline-primary">Enviar todas las pendientes</button>
+    <form method="post" onsubmit="return confirm('Se envía UN correo por comuna con las personas MARCADAS (✓) de esa comuna@(Model.ModoPruebaEmail is null ? "" : " (MODO PRUEBA: nada llega a las municipalidades)"). ¿Continuar?');">
+        <button asp-page-handler="EnviarMarcadas" class="btn btn-sm btn-outline-primary"
+                disabled="@(Model.MarcadasPendientes == 0 ? "disabled" : null)">
+            Enviar marcadas (@Model.MarcadasPendientes)
+        </button>
     </form>
     <a href="/Imprimir" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir lista</a>
     <a href="/Imprimir?marcadas=true" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir marcadas</a>
@@ -153,7 +156,11 @@
             </td>
             <td class="dato text-center" title="@p.Origen" style="cursor:help">@p.Oficina</td>
             <td class="col-acciones">
-                @if (pendientesComuna > 0)
+                @if (esEnviada)
+                {
+                    <button class="btn btn-sm btn-success text-white" disabled title="Esta petición ya fue enviada">✓ Enviada</button>
+                }
+                else if (pendientesComuna > 0)
                 {
                     var rutDudoso = Model.Peticiones.Any(x =>
                         x.Comuna.Equals(p.Comuna, System.StringComparison.OrdinalIgnoreCase)

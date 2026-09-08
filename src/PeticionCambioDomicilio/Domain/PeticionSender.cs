@@ -65,14 +65,18 @@ public sealed class PeticionSender
     }
 
     /// <summary>
-    /// Envía en UN correo todas las peticiones pendientes de una comuna (Borrador / Sin correo /
+    /// Envía en UN correo las peticiones pendientes de una comuna (Borrador / Sin correo /
     /// Error). No toca las que ya están Enviadas. Devuelve el estado resultante del grupo.
+    /// Si <paramref name="soloIds"/> viene, se limita a esas peticiones (envío de las marcadas);
+    /// null = todas las pendientes de la comuna.
     /// </summary>
-    public async Task<SendResult> SendComunaAsync(string comuna, CancellationToken cancellationToken)
+    public async Task<SendResult> SendComunaAsync(
+        string comuna, CancellationToken cancellationToken, IReadOnlySet<long>? soloIds = null)
     {
         var pendientes = _repository.All()
             .Where(p => string.Equals(p.Comuna, comuna, StringComparison.OrdinalIgnoreCase))
             .Where(EsPendiente)
+            .Where(p => soloIds is null || soloIds.Contains(p.Id))
             .OrderBy(p => p.OrdenImportacion).ThenBy(p => p.Id)
             .ToList();
 
