@@ -28,8 +28,8 @@ directorio oficial de comunas (`data/comunas.csv`, 513 comunas) y el transporte 
    art. 14 del Decreto 170 y Plataforma SGL. Nombre y RUT son lo único que cambia.
 4. **Estado por petición** — Borrador / Enviada / Sin correo de comuna / Error, con reintento.
 5. **Columna Marcar** — casilla por fila para el seguimiento del operador. La fila marcada se pinta.
-6. **Orden del Excel** — la lista respeta el orden del libro (hojas en su orden, filas de arriba
-   abajo), no se dispersa por estado ni por fecha de importación.
+6. **Orden de la lista** — las pendientes van arriba en el orden del libro (hojas en su orden,
+   filas de arriba abajo); las enviadas van abajo, de la más nueva a la más antigua.
 7. **Columna Origen** — muestra solo la oficina: `AV. ARGENTINA`, `PLACILLA` o `MERC. PUERTO`.
    El detalle de hoja y fila queda guardado para trazabilidad, pero no ensucia la tabla.
 

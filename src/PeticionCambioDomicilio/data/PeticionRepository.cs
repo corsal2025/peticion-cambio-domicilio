@@ -179,9 +179,13 @@ public sealed class PeticionRepository
     {
         using var cn = Open();
         using var cmd = cn.CreateCommand();
+        // Pendientes arriba, en el orden del Excel. Enviadas abajo, de la más nueva a la más
+        // antigua (EnviadaEn es ISO 8601, el orden de texto coincide con el cronológico).
+        // Las pendientes tienen EnviadaEn NULL, así que ese criterio no las mueve.
         cmd.CommandText = """
             SELECT * FROM Peticion
              ORDER BY CASE WHEN Estado = 1 THEN 1 ELSE 0 END ASC,
+                      EnviadaEn DESC,
                       OrdenImportacion ASC,
                       Id ASC;
             """;
