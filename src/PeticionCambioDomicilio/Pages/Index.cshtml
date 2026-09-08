@@ -87,6 +87,7 @@
             <th>F. solicitud</th>
             <th>Envío</th>
             <th>Plazo · 15 d. háb.</th>
+            <th>Estado carpeta</th>
             <th>Origen</th>
             <th style="width:1%"></th>
         </tr>
@@ -167,6 +168,21 @@
                     </div>
                 }
             </td>
+            <td>
+                <form method="post" asp-page-handler="EstadoCarpeta" class="carpeta-form d-inline">
+                    <input type="hidden" name="id" value="@p.Id" />
+                    <select name="estado" class="carpeta-select" title="Cambiar el estado de la carpeta" onchange="this.form.submit()">
+                        @foreach (var v in EstadoCarpetaCatalog.Valores)
+                        {
+                            <option value="@v" selected="@(p.EstadoCarpeta == v ? "selected" : null)">@v</option>
+                        }
+                    </select>
+                </form>
+                @if (p.SubidaEn is not null)
+                {
+                    <div class="carpeta-fecha num">subida @p.SubidaEn.Value.ToString("dd-MM-yyyy")</div>
+                }
+            </td>
             <td class="text-muted" title="@p.Origen" style="cursor:help; font-size:.78rem;">@p.Oficina</td>
             <td class="col-acciones">
                 @if (esEnviada)
@@ -197,7 +213,7 @@
     }
     @if (Model.Peticiones.Count == 0)
     {
-        <tr><td colspan="9" class="text-center text-muted py-4">Sin peticiones. Importá desde el Excel.</td></tr>
+        <tr><td colspan="10" class="text-center text-muted py-4">Sin peticiones. Importá desde el Excel.</td></tr>
     }
     </tbody>
 </table>

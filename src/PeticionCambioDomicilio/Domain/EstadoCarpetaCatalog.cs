@@ -35,6 +35,31 @@ public static class EstadoCarpetaCatalog
         "SUBIDA CON F8" or
         "SUBIDA CON OFICIO";
 
+    /// <summary>
+    /// Etapa del flujo de cambio de domicilio, para decidir si un estado que viene del Excel hace
+    /// AVANZAR la carpeta o no. 0 = fuera del flujo (otro trámite), 1 = recién llegada,
+    /// 2 = solicitada a la comuna, 3 = subida a CONASET (cerrada). La importación solo aplica un
+    /// estado del Excel si su rango es mayor al que ya tiene la petición.
+    /// </summary>
+    public static int Rango(string? estadoCrudo)
+    {
+        var e = Normalizar(estadoCrudo);
+        return e switch
+        {
+            "CAMBIO DE DOMICILIO" => 1,
+            "CAMBIO DE DOMICILIO SOLICITADO" => 2,
+            _ => EsFinalizado(e) ? 3 : 0,
+        };
+    }
+
+    /// <summary>true si el estado significa que la carpeta la subió la comuna vía SGL (no nosotros).</summary>
+    public static bool SubidaPorComuna(string? estado) => estado is
+        "CAMBIO DOM. SUBIDO A CONASET" or "SUBIDA A CONASET";
+
+    /// <summary>true si el estado significa que la carpeta la tuvimos que subir nosotros (escalamiento).</summary>
+    public static bool SubidaPorNosotros(string? estado) => estado is
+        "CAMBIO DOM. SUBIDO CON CORREO" or "SUBIDA CON F8" or "SUBIDA CON OFICIO";
+
     public static string Normalizar(string? crudo)
     {
         var f = TextNormalization.Fold(crudo);

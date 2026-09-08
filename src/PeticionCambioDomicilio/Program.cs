@@ -195,12 +195,13 @@ if (args.Contains("--import"))
         Console.WriteLine($"Respaldo previo: {backup}");
     }
 
-    var r = importer.Import(path, repo.AddIfNew, repo.All(), repo.Delete);
+    var r = importer.Import(path, repo.AddIfNew, repo.All(), repo.Delete, repo.SincronizarCarpetaDesdeExcel);
     Console.WriteLine($"Hojas leídas:          {r.HojasLeidas}");
     Console.WriteLine($"Filas leídas:          {r.FilasLeidas}");
     Console.WriteLine($"Filas CAMBIO DE DOM.:  {r.FilasCambioDomicilio}");
     Console.WriteLine($"Peticiones nuevas:     {r.Nuevas}");
     Console.WriteLine($"Duplicadas (ya había): {r.Duplicadas}");
+    Console.WriteLine($"Carpetas sincronizadas: {r.CarpetasSincronizadas}");
     Console.WriteLine($"RUT inválidos:         {r.RutInvalidos}");
     Console.WriteLine($"Comuna no reconocida:  {r.ComunaNoReconocida}");
     Console.WriteLine($"Quitadas (ya no estan): {r.Obsoletas}");

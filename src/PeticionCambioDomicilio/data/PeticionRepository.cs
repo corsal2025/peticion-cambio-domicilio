@@ -78,7 +78,8 @@ public sealed class PeticionRepository
                 Oficina           TEXT,
                 OrdenImportacion  INTEGER NOT NULL DEFAULT 0,
                 Marcada           INTEGER NOT NULL DEFAULT 0,
-                EstadoCarpeta     TEXT NOT NULL DEFAULT 'CAMBIO DE DOMICILIO'
+                EstadoCarpeta     TEXT NOT NULL DEFAULT 'CAMBIO DE DOMICILIO',
+                SubidaEn          TEXT
             );
             CREATE UNIQUE INDEX IF NOT EXISTS UX_Peticion_Rut_Comuna
                 ON Peticion (Rut, Comuna);
@@ -92,6 +93,7 @@ public sealed class PeticionRepository
                      ("OrdenImportacion", "INTEGER NOT NULL DEFAULT 0"),
                      ("Marcada", "INTEGER NOT NULL DEFAULT 0"),
                      ("EstadoCarpeta", "TEXT NOT NULL DEFAULT 'CAMBIO DE DOMICILIO'"),
+                     ("SubidaEn", "TEXT"),
                  })
         {
             if (ColumnExists(cn, columna))
@@ -229,15 +231,89 @@ public sealed class PeticionRepository
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>Cambia el estado de la carpeta (desplegable estilo Excel).</summary>
+    /// <summary>
+    /// Cambia el estado de la carpeta (desplegable estilo Excel). Si el nuevo estado es de "subida"
+    /// y todavía no hay <c>SubidaEn</c>, la estampa con la fecha de hoy — así el cierre manual
+    /// también cuenta para la estadística de demora.
+    /// </summary>
     public void SetEstadoCarpeta(long id, string estado)
     {
         using var cn = Open();
         using var cmd = cn.CreateCommand();
-        cmd.CommandText = "UPDATE Peticion SET EstadoCarpeta = $e WHERE Id = $id;";
+        if (Domain.EstadoCarpetaCatalog.Rango(estado) == 3)
+        {
+            cmd.CommandText = "UPDATE Peticion SET EstadoCarpeta = $e, SubidaEn = COALESCE(SubidaEn, $hoy) WHERE Id = $id;";
+            cmd.Parameters.AddWithValue("$hoy", DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd"));
+        }
+        else
+        {
+            cmd.CommandText = "UPDATE Peticion SET EstadoCarpeta = $e WHERE Id = $id;";
+        }
+
         cmd.Parameters.AddWithValue("$e", estado);
         cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Sincroniza el estado de la carpeta desde el Excel. Solo AVANZA: si el Excel trae un estado
+    /// de una etapa anterior o lateral, no toca nada. Cuando la carpeta pasa a "subida":
+    ///  - guarda <paramref name="subidaEn"/> si aún no había fecha;
+    ///  - si la petición seguía pendiente, la marca como Enviada (la comuna resolvió sin que
+    ///    llegáramos a mandar el correo).
+    /// Devuelve true si cambió algo.
+    /// </summary>
+    public bool SincronizarCarpetaDesdeExcel(long id, string estadoExcel, DateOnly? subidaEn)
+    {
+        var rangoNuevo = Domain.EstadoCarpetaCatalog.Rango(estadoExcel);
+        if (rangoNuevo < 2)
+        {
+            return false;
+        }
+
+        using var cn = Open();
+
+        string? estadoActual;
+        using (var q = cn.CreateCommand())
+        {
+            q.CommandText = "SELECT EstadoCarpeta FROM Peticion WHERE Id = $id;";
+            q.Parameters.AddWithValue("$id", id);
+            estadoActual = q.ExecuteScalar() as string;
+        }
+
+        if (estadoActual is null || Domain.EstadoCarpetaCatalog.Rango(estadoActual) >= rangoNuevo)
+        {
+            return false;
+        }
+
+        var canonico = Domain.EstadoCarpetaCatalog.Normalizar(estadoExcel);
+        var fecha = subidaEn?.ToString("yyyy-MM-dd");
+
+        using var cmd = cn.CreateCommand();
+        if (rangoNuevo == 3)
+        {
+            cmd.CommandText = """
+                UPDATE Peticion
+                   SET EstadoCarpeta  = $e,
+                       SubidaEn       = COALESCE(SubidaEn, $f),
+                       Estado         = CASE WHEN Estado <> 1 THEN 1 ELSE Estado END,
+                       EnviadaEn      = COALESCE(EnviadaEn, $f),
+                       DetalleEstado  = CASE WHEN Estado <> 1
+                            THEN 'Carpeta subida detectada en el Excel — la comuna resolvió sin nuestra solicitud'
+                            ELSE DetalleEstado END
+                 WHERE Id = $id;
+                """;
+            cmd.Parameters.AddWithValue("$f", (object?)fecha ?? DBNull.Value);
+        }
+        else
+        {
+            cmd.CommandText = "UPDATE Peticion SET EstadoCarpeta = $e WHERE Id = $id;";
+        }
+
+        cmd.Parameters.AddWithValue("$e", canonico);
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
+        return true;
     }
 
     /// <summary>Invierte la marca personal de una fila. Devuelve el valor que quedo.</summary>
@@ -302,5 +378,8 @@ public sealed class PeticionRepository
         DestinatariosCorreo = r.IsDBNull(r.GetOrdinal("DestinatariosCorreo"))
             ? null
             : r.GetString(r.GetOrdinal("DestinatariosCorreo")),
+        SubidaEn = r.IsDBNull(r.GetOrdinal("SubidaEn"))
+            ? null
+            : DateOnly.Parse(r.GetString(r.GetOrdinal("SubidaEn"))),
     };
 }

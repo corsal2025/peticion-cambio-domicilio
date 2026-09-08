@@ -48,7 +48,14 @@ public sealed class Peticion
     public string? DestinatariosCorreo { get; set; }
 
     /// <summary>Estado de la carpeta física en el flujo — los mismos valores del desplegable
-    /// "ESTADO DE LA CARPETA" del Excel. El operador lo cambia desde el dashboard.
+    /// "ESTADO DE LA CARPETA" del Excel. El operador lo cambia desde el dashboard y la
+    /// importación lo hace avanzar cuando el Excel trae un estado más adelantado.
     /// Al importar entra como "CAMBIO DE DOMICILIO".</summary>
     public string EstadoCarpeta { get; set; } = EstadoCarpetaCatalog.CambioDeDomicilio;
+
+    /// <summary>Fecha en que la carpeta se subió a CONASET. Sale de la columna
+    /// "FECHA CUANDO SE SUBIO LA CARPETA" del Excel; si esa celda está vacía cuando el estado ya
+    /// figura como subida, se usa la fecha de la importación (o del cambio manual). Mide la
+    /// demora de cada comuna: días hábiles entre <see cref="EnviadaEn"/> y esta fecha.</summary>
+    public DateOnly? SubidaEn { get; set; }
 }

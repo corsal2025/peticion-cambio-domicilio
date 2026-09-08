@@ -262,6 +262,21 @@ main { padding-top: 1.4rem; }
 .plazo--bad .plazo-bar > i { background: var(--bad-rail); }   .plazo--bad .plazo-txt { color: var(--bad-ink); font-weight: 600; }
 .plazo--idle .plazo-txt { color: var(--ink-faint); }
 
+/* ---------- Estado de la carpeta (desplegable espejo del Excel) ---------- */
+.carpeta-select {
+  font-size: .78rem;
+  font-weight: 600;
+  padding: .22rem .45rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  max-width: 200px;
+  cursor: pointer;
+}
+.carpeta-select:hover { border-color: var(--accent); }
+.carpeta-fecha { font-size: .68rem; font-weight: 600; color: var(--ok-ink); margin-top: .2rem; }
+
 /* ---------- Estados de fila (riel a la izquierda + tinte) ---------- */
 /* El riel va SOLO en la primera celda; si no, se dibujan lineas verticales en cada columna. */
 .table > tbody > tr.fila-pendiente > td:first-child { box-shadow: inset 3px 0 0 var(--line-strong); }

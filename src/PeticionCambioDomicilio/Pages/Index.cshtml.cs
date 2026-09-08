@@ -84,10 +84,12 @@ public sealed class IndexModel : PageModel
                 _options.ExcelPath!,
                 _repository.AddIfNew,
                 _repository.All(),
-                _repository.Delete);
+                _repository.Delete,
+                _repository.SincronizarCarpetaDesdeExcel);
             var msg = $"Hojas: {result.HojasLeidas} · Filas: {result.FilasLeidas} · " +
                       $"Cambio de domicilio: {result.FilasCambioDomicilio} · Nuevas: {result.Nuevas} · " +
-                      $"Actualizadas: {result.Duplicadas} · Quitadas (ya no están en el Excel): {result.Obsoletas} · " +
+                      $"Actualizadas: {result.Duplicadas} · Carpetas sincronizadas: {result.CarpetasSincronizadas} · " +
+                      $"Quitadas (ya no están en el Excel): {result.Obsoletas} · " +
                       $"RUT inválidos: {result.RutInvalidos} · Comuna no reconocida: {result.ComunaNoReconocida}";
             if (result.Avisos.Count > 0)
             {

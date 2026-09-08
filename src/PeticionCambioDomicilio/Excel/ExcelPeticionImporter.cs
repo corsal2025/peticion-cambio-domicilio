@@ -13,6 +13,7 @@ public sealed record ImportResult(
     int RutInvalidos,
     int ComunaNoReconocida,
     int Obsoletas,
+    int CarpetasSincronizadas,
     IReadOnlyList<string> Avisos);
 
 /// <summary>
@@ -41,11 +42,12 @@ public sealed class ExcelPeticionImporter
         string excelPath,
         Func<Peticion, bool> addIfNew,
         IReadOnlyList<Peticion>? existentes = null,
-        Action<long>? borrar = null)
+        Action<long>? borrar = null,
+        Func<long, string, DateOnly?, bool>? sincronizarCarpeta = null)
     {
         var avisos = new List<string>();
         using var loaded = LoadedWorkbook.Open(excelPath);
-        return ImportCore(loaded.Workbook, avisos, addIfNew, existentes, borrar);
+        return ImportCore(loaded.Workbook, avisos, addIfNew, existentes, borrar, sincronizarCarpeta);
     }
 
     private ImportResult ImportCore(
@@ -53,14 +55,21 @@ public sealed class ExcelPeticionImporter
         List<string> avisos,
         Func<Peticion, bool> addIfNew,
         IReadOnlyList<Peticion>? existentes,
-        Action<long>? borrar)
+        Action<long>? borrar,
+        Func<long, string, DateOnly?, bool>? sincronizarCarpeta)
     {
         var vistas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Índice de las peticiones que ya tenemos, por RUT|Comuna, para poder engancharles
+        // el avance de estado que viene del Excel aunque su fila ya no diga "CAMBIO DE DOMICILIO".
+        var porClave = existentes?
+            .GroupBy(p => p.Rut + "|" + p.Comuna, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
         var ordenObjetivo = TextNormalization.Fold(_options.EstadoCambioDomicilio);
         var ignoradas = _options.HojasIgnoradas.Select(TextNormalization.Fold).ToArray();
 
-        int hojas = 0, filas = 0, cd = 0, nuevas = 0, dup = 0, rutInv = 0, comunaNo = 0;
+        int hojas = 0, filas = 0, cd = 0, nuevas = 0, dup = 0, rutInv = 0, comunaNo = 0, sincro = 0;
         long orden = 0; // posicion global: hojas en el orden del libro, filas de arriba abajo
 
         foreach (var sheet in workbook.Worksheets)
@@ -93,6 +102,7 @@ public sealed class ExcelPeticionImporter
             var cComuna = Col(_options.Columns.ComunaOrigen);
             var cFecha = Col(_options.Columns.FechaSolicitud);
             var cClases = Col(_options.Columns.Clases);
+            var cFechaSubida = Col(_options.Columns.FechaSubidaCarpeta);
 
             // Red de seguridad: si alguien escribe encima del encabezado "ESTADO DE LA CARPETA"
             // (pasó de verdad: quedó con el texto "CAMBIO DE DOMICILIO SOLICITADO"), la columna
@@ -136,29 +146,60 @@ public sealed class ExcelPeticionImporter
                 orden++;
 
                 var estadoCrudo = row.Cell(cEstado.Value).GetString();
-                var estado = TextNormalization.Fold(estadoCrudo);
-                if (estado != ordenObjetivo)
+                var esCambioDomicilio = TextNormalization.Fold(estadoCrudo) == ordenObjetivo;
+                var rangoExcel = EstadoCarpetaCatalog.Rango(estadoCrudo);
+
+                // Fila de otro trámite (1ª licencia, canje…) que no es una etapa posterior del
+                // cambio de domicilio: no hay nada que hacer con ella.
+                if (!esCambioDomicilio && rangoExcel < 2)
                 {
                     continue;
                 }
-
-                cd++;
 
                 var nombre = row.Cell(cNombre.Value).GetString().Trim();
                 var rutRaw = row.Cell(cRut.Value).GetString().Trim();
                 var comunaRaw = row.Cell(cComuna.Value).GetString().Trim();
                 var clases = cClases is null ? null : row.Cell(cClases.Value).GetString().Trim();
                 var fecha = cFecha is null ? null : ReadDate(row.Cell(cFecha.Value));
+                var fechaSubida = cFechaSubida is null ? null : ReadDate(row.Cell(cFechaSubida.Value));
 
                 var rutNormalizado = RutValidator.NormalizeAndValidate(rutRaw);
                 var rutInvalido = rutNormalizado is null;
+                var comunaCanonica = _directory.ResolveComunaName(comunaRaw);
+
+                var clave = (rutNormalizado ?? (rutRaw.Length > 0 ? rutRaw : "SIN RUT"))
+                          + "|"
+                          + (comunaCanonica ?? (comunaRaw.Length > 0 ? comunaRaw : "(sin comuna)"));
+
+                // Etapa posterior del flujo (SOLICITADO / SUBIDA…): si ya teníamos la petición, se
+                // hace avanzar su carpeta y se anota la fecha de subida. No se crean peticiones acá.
+                if (!esCambioDomicilio)
+                {
+                    if (sincronizarCarpeta is not null && porClave is not null
+                        && porClave.TryGetValue(clave, out var existente))
+                    {
+                        var subida = rangoExcel >= 3
+                            ? (fechaSubida ?? DateOnly.FromDateTime(DateTime.Today))
+                            : (DateOnly?)null;
+                        if (sincronizarCarpeta(existente.Id, estadoCrudo, subida))
+                        {
+                            sincro++;
+                        }
+
+                        vistas.Add(clave); // ya no dice "CAMBIO DE DOMICILIO" pero sigue siendo nuestra
+                    }
+
+                    continue;
+                }
+
+                cd++;
+
                 if (rutInvalido)
                 {
                     rutInv++;
                     avisos.Add($"{sheet.Name}!fila {row.RowNumber()}: RUT \"{rutRaw}\" no valida — se guarda para revisión.");
                 }
 
-                var comunaCanonica = _directory.ResolveComunaName(comunaRaw);
                 if (comunaCanonica is null)
                 {
                     comunaNo++;
@@ -181,7 +222,7 @@ public sealed class ExcelPeticionImporter
                     EstadoCarpeta = EstadoCarpetaCatalog.Normalizar(estadoCrudo),
                 };
 
-                vistas.Add(peticion.Rut + "|" + peticion.Comuna);
+                vistas.Add(clave);
                 if (addIfNew(peticion))
                 {
                     nuevas++;
@@ -207,7 +248,7 @@ public sealed class ExcelPeticionImporter
             }
         }
 
-        return new ImportResult(hojas, filas, cd, nuevas, dup, rutInv, comunaNo, obsoletas, avisos);
+        return new ImportResult(hojas, filas, cd, nuevas, dup, rutInv, comunaNo, obsoletas, sincro, avisos);
     }
 
     /// <summary>

@@ -54,6 +54,11 @@ public sealed class ColumnMap
     /// <summary>Columna de la que sale la "fecha de solicitud" de la petición.</summary>
     public string FechaSolicitud { get; set; } = "FECHA DE LA CITACION";
 
+    /// <summary>Columna con la fecha en que la comuna subió la carpeta a CONASET. Se usa para medir
+    /// cuánto se demora cada comuna. Si está vacía cuando el estado ya figura como subida, se toma
+    /// la fecha de la importación.</summary>
+    public string FechaSubidaCarpeta { get; set; } = "FECHA CUANDO SE SUBIO LA CARPETA";
+
     /// <summary>Opcional: clases de licencia. El libro DETALLE CARPETAS no la trae; queda vacía.</summary>
     public string Clases { get; set; } = "CLASES";
 }
