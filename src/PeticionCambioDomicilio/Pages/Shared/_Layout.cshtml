@@ -11,14 +11,18 @@
 </head>
 <body>
     <header>
-        <nav class="navbar navbar-expand-sm navbar-light bg-white border-bottom box-shadow mb-3">
+        <nav class="navbar navbar-expand-sm navbar-light bg-white border-bottom mb-0">
             <div class="container">
-                <a class="navbar-brand" asp-page="/Index">Petición Cambio de Domicilio</a>
+                <a class="navbar-brand" asp-page="/Index">Cambio de Domicilio</a>
+                @{
+                    var pagina = ViewContext.RouteData.Values["page"]?.ToString() ?? "";
+                    string NavClass(string p) => "nav-link" + (string.Equals(pagina, p, StringComparison.OrdinalIgnoreCase) ? " active" : "");
+                }
                 <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
                     <ul class="navbar-nav flex-grow-1">
-                        <li class="nav-item"><a class="nav-link text-dark" asp-page="/Index">Peticiones</a></li>
-                        <li class="nav-item"><a class="nav-link text-dark" asp-page="/Comunas">Comunas</a></li>
-                        <li class="nav-item"><a class="nav-link text-dark" asp-page="/Configuracion">Configuración</a></li>
+                        <li class="nav-item"><a class="@NavClass("/Index")" asp-page="/Index">Peticiones</a></li>
+                        <li class="nav-item"><a class="@NavClass("/Comunas")" asp-page="/Comunas">Comunas</a></li>
+                        <li class="nav-item"><a class="@NavClass("/Configuracion")" asp-page="/Configuracion">Configuración</a></li>
                     </ul>
                     @{
                         // Single-file exe: Assembly.Location viene vacio; se usa la ruta del proceso.
@@ -47,13 +51,15 @@
     }
     @if (envioReal)
     {
-        <div class="w-100 text-center fw-bold text-dark py-1" style="background:#ffc107;letter-spacing:.5px;">
-            ⚠ ENVÍO REAL ACTIVO — los correos salen a las municipalidades
+        <div class="modo-franja modo-franja--real">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m10.3 3.6-8 13.9A2 2 0 0 0 4 20.5h16a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+            ENVÍO REAL ACTIVO — los correos salen a las municipalidades
         </div>
     }
     else if (modoPrueba)
     {
-        <div class="w-100 text-center fw-bold text-white py-1" style="background:#dc3545;letter-spacing:.5px;">
+        <div class="modo-franja modo-franja--prueba">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>
             MODO PRUEBA — nada llega a las municipalidades (todo va a @Options.TestModeEmail)
         </div>
     }

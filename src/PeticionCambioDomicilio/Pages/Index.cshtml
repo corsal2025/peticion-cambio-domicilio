@@ -3,22 +3,37 @@
 @using PeticionCambioDomicilio.Domain
 @{
     ViewData["Title"] = "Peticiones";
+    var total = Model.Peticiones.Count;
+    var enviadas = Model.Peticiones.Count(p => p.Estado == EstadoPeticion.Enviada);
+    var pendientes = total - enviadas;
+    var vencidas = Model.Peticiones.Count(p => PlazoInfo.Para(p).Vencido);
 }
 
-<h1 class="h3 mb-3">Peticiones de cambio de domicilio</h1>
+<div class="d-flex align-items-end justify-content-between flex-wrap gap-3 mb-3">
+    <div>
+        <h1 class="h3 mb-1">Peticiones de cambio de domicilio</h1>
+        <div class="text-muted" style="font-size:.8rem;">Flujo saliente · Decreto 170, art. 14 · plazo legal 15 días hábiles</div>
+    </div>
+    <div class="stat-row">
+        <div class="stat-chip"><b class="num">@total</b><span>Total</span></div>
+        <div class="stat-chip stat-chip--soft"><b class="num">@pendientes</b><span>Pendientes</span></div>
+        <div class="stat-chip stat-chip--ok"><b class="num">@enviadas</b><span>Enviadas</span></div>
+        <div class="stat-chip stat-chip--bad"><b class="num">@vencidas</b><span>Vencidas</span></div>
+    </div>
+</div>
 
 @if (Model.ModoPruebaEmail is not null)
 {
-    <div class="alert alert-danger py-2">
-        <strong>MODO PRUEBA ACTIVO.</strong> Ningun correo sale hacia las municipalidades.
-        Todo se desvia a <code>@Model.ModoPruebaEmail</code>.
+    <div class="alert alert-danger">
+        <strong>MODO PRUEBA ACTIVO.</strong> Ningún correo sale hacia las municipalidades.
+        Todo se desvía a <code>@Model.ModoPruebaEmail</code>.
         Para enviar de verdad, vaciar <code>Peticion:TestModeEmail</code> en appsettings.Local.json.
     </div>
 }
 
 @if (Model.ComunasSinCorreo.Count > 0)
 {
-    <div class="alert alert-warning py-2">
+    <div class="alert alert-warning">
         <strong>⚠ @Model.ComunasSinCorreo.Count comuna(s) sin correo en el directorio:</strong>
         @string.Join(", ", Model.ComunasSinCorreo).
         Esas peticiones quedan en espera. Cargá el correo en
@@ -26,29 +41,22 @@
     </div>
 }
 
-<div class="row mb-3">
-    <div class="col">
+@if (!Model.MailListo || !Model.ExcelConfigurado)
+{
+    <div class="d-flex flex-wrap gap-2 mb-3" style="font-size:.75rem;">
         @if (!Model.MailListo)
         {
-            <span class="badge bg-warning text-dark">Correo EWS sin configurar</span>
+            <span class="badge bg-warning">Correo EWS sin configurar</span>
         }
-        else
+        @if (!Model.ExcelConfigurado)
         {
-            <span class="badge bg-success">Correo EWS listo</span>
+            <span class="badge bg-warning">Excel sin configurar</span>
         }
         <span class="badge bg-secondary">@Model.ComunasEnDirectorio comunas en directorio</span>
-        @if (Model.ExcelConfigurado)
-        {
-            <span class="badge bg-secondary">Excel: @System.IO.Path.GetFileName(Model.ExcelPath)</span>
-        }
-        else
-        {
-            <span class="badge bg-warning text-dark">Excel sin configurar</span>
-        }
     </div>
-</div>
+}
 
-<div class="toolbar d-flex flex-wrap align-items-center gap-2 mb-2">
+<div class="toolbar mb-2">
     <form method="post">
         <button asp-page-handler="Importar" class="btn btn-sm btn-primary">Importar / actualizar desde Excel</button>
     </form>
@@ -58,12 +66,10 @@
             Enviar marcadas (@Model.MarcadasPendientes)
         </button>
     </form>
+    <span class="spacer"></span>
     <a href="/Imprimir" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir lista</a>
     <a href="/Imprimir?marcadas=true" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir marcadas</a>
-    <span class="text-muted small ms-1">@Model.Peticiones.Count peticiones</span>
-    <span class="badge bg-success text-white py-1 px-2 ms-2">✓ @Model.Peticiones.Count(p => p.Estado == EstadoPeticion.Enviada) enviadas</span>
-    <span class="badge bg-secondary text-white py-1 px-2 ms-1">⏳ @Model.Peticiones.Count(p => p.Estado != EstadoPeticion.Enviada) pendientes</span>
-    <form method="post" class="ms-auto" onsubmit="return confirm('¿BORRAR las @Model.Peticiones.Count peticiones cargadas? Esto borra también el HISTORIAL DE ENVÍO (qué se mandó y cuándo). Se guarda un respaldo automático de la base antes. El Excel NO se toca.');">
+    <form method="post" onsubmit="return confirm('¿BORRAR las @Model.Peticiones.Count peticiones cargadas? Esto borra también el HISTORIAL DE ENVÍO (qué se mandó y cuándo). Se guarda un respaldo automático de la base antes. El Excel NO se toca.');">
         <button asp-page-handler="BorrarTodo" class="btn btn-sm btn-outline-danger" disabled="@(Model.Peticiones.Count == 0 ? "disabled" : null)">
             Borrar todos los datos
         </button>
@@ -71,7 +77,7 @@
 </div>
 
 <div class="table-responsive">
-<table class="table table-hover align-middle mb-0">
+<table class="table table-hover align-middle">
     <thead>
         <tr>
             <th class="text-center" style="width:1%">✓</th>
@@ -91,74 +97,81 @@
         var pendientesComuna = Model.PendientesPorComuna.TryGetValue(p.Comuna, out var n) ? n : 0;
         var esEnviada = p.Estado == EstadoPeticion.Enviada;
         var claseFila = p.Marcada
-            ? "table-info fila-marcada"
+            ? "fila-marcada"
             : esEnviada
                 ? "fila-enviada"
                 : p.Estado == EstadoPeticion.SinCorreoComuna
-                    ? "table-warning fila-sincorreo"
+                    ? "fila-sincorreo"
                     : p.Estado == EstadoPeticion.Error
-                        ? "table-danger fila-error"
+                        ? "fila-error"
                         : p.RutInvalido
-                            ? "table-warning fila-rutinvalido"
+                            ? "fila-rutinvalido"
                             : "fila-pendiente";
+
+        var plazo = PlazoInfo.Para(p);
+        var pct = plazo.Inicio is null
+            ? 0
+            : Math.Clamp(plazo.DiasTranscurridos * 100 / DeadlineCalculator.PlazoDiasHabiles, 0, 100);
+        var plazoClase = plazo.Inicio is null
+            ? "plazo--idle"
+            : plazo.Vencido ? "plazo--bad" : plazo.DiasRestantes <= 3 ? "plazo--warn" : "plazo--ok";
+        var envioTitulo = !string.IsNullOrEmpty(p.DetalleEstado) ? p.DetalleEstado : null;
 
         <tr id="fila-@p.Id" class="@claseFila">
             <td class="text-center">
                 <form method="post" class="d-inline js-marcar" data-id="@p.Id">
                     <input type="hidden" name="id" value="@p.Id" />
-                    <button asp-page-handler="Marcar" class="btn btn-sm btn-link p-0 fs-5 text-decoration-none js-marcar-btn"
+                    <button asp-page-handler="Marcar" class="btn btn-sm btn-link p-0 text-decoration-none js-marcar-btn"
                             title="Marcar / desmarcar">@(p.Marcada ? "☑" : "☐")</button>
                 </form>
             </td>
             <td class="dato">@p.NombreCompleto</td>
-            <td class="dato text-center">@p.Rut @(p.RutInvalido ? "⚠" : "")</td>
-            <td class="dato text-center">@p.Comuna</td>
-            <td class="dato text-center">@(p.FechaSolicitud?.ToString("dd-MM-yyyy") ?? "—")</td>
-            <td class="dato text-center">
-                @{
-                    var envioTitulo = !string.IsNullOrEmpty(p.DetalleEstado) ? p.DetalleEstado : null;
-                }
+            <td class="dato num">@p.Rut @(p.RutInvalido ? "⚠" : "")</td>
+            <td class="text-center"><span class="comuna-chip">@p.Comuna</span></td>
+            <td class="num">@(p.FechaSolicitud?.ToString("dd-MM-yyyy") ?? "—")</td>
+            <td>
                 @if (p.Estado == EstadoPeticion.Enviada && p.EnviadaEn is not null)
                 {
-                    <span class="badge bg-success text-white px-2 py-1 shadow-sm" title="@envioTitulo" style="cursor:help">
-                        ✓ Enviado (@p.EnviadaEn.Value.ToString("dd-MM-yyyy HH:mm"))
+                    <span class="pill pill--ok" title="@envioTitulo" style="cursor:help">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5" /></svg>Enviado
                     </span>
+                    <span class="pill-time num">@p.EnviadaEn.Value.ToString("dd-MM HH:mm")</span>
                 }
                 else if (p.Estado == EstadoPeticion.SinCorreoComuna)
                 {
-                    <span class="badge bg-warning text-dark px-2 py-1" title="@envioTitulo" style="cursor:help">⚠ Sin correo comuna</span>
+                    <span class="pill pill--warn" title="@envioTitulo" style="cursor:help">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v5" /><path d="M12 17h.01" /></svg>Sin correo comuna
+                    </span>
                 }
                 else if (p.Estado == EstadoPeticion.Error)
                 {
-                    <span class="badge bg-danger text-white px-2 py-1" title="@envioTitulo" style="cursor:help">✕ Error</span>
-                }
-                else
-                {
-                    <span class="badge bg-light text-secondary border px-2 py-1 fw-semibold">⏳ Sin enviar</span>
-                }
-            </td>
-            <td class="dato text-center">
-                @{
-                    var plazo = PeticionCambioDomicilio.Domain.PlazoInfo.Para(p);
-                }
-                @if (plazo.Inicio is null)
-                {
-                    <span class="text-muted fw-normal">El reloj parte al enviar</span>
-                }
-                else
-                {
-                    var clasePlazo = plazo.Vencido ? "text-danger" : plazo.DiasRestantes <= 3 ? "text-warning" : "text-success";
-                    var plazoTitulo = $"Día {plazo.DiasTranscurridos} de 15 · vence {plazo.Vence?.ToString("dd-MM-yyyy")}";
-                    <span class="@clasePlazo" title="@plazoTitulo" style="cursor:help">
-                        @(plazo.Vencido ? $"Vencido hace {-plazo.DiasRestantes} d." : $"Quedan {plazo.DiasRestantes} d.")
+                    <span class="pill pill--bad" title="@envioTitulo" style="cursor:help">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>Error
                     </span>
                 }
+                else
+                {
+                    <span class="pill pill--idle">Sin enviar</span>
+                }
             </td>
-            <td class="dato text-center" title="@p.Origen" style="cursor:help">@p.Oficina</td>
+            <td>
+                @if (plazo.Inicio is null)
+                {
+                    <span class="plazo-txt text-muted">El reloj parte al enviar</span>
+                }
+                else
+                {
+                    <div class="plazo @plazoClase" title="Día @plazo.DiasTranscurridos de 15 · vence @plazo.Vence?.ToString("dd-MM-yyyy")" style="cursor:help">
+                        <div class="plazo-bar"><i style="width:@(pct)%"></i></div>
+                        <span class="plazo-txt">@(plazo.Vencido ? $"Vencido hace {-plazo.DiasRestantes} d." : $"Quedan {plazo.DiasRestantes} d.")</span>
+                    </div>
+                }
+            </td>
+            <td class="text-muted" title="@p.Origen" style="cursor:help; font-size:.78rem;">@p.Oficina</td>
             <td class="col-acciones">
                 @if (esEnviada)
                 {
-                    <button class="btn btn-sm btn-success text-white" disabled title="Esta petición ya fue enviada">✓ Enviada</button>
+                    <span class="pill pill--ok">✓ Enviada</span>
                 }
                 else if (pendientesComuna > 0)
                 {
@@ -175,13 +188,9 @@
                         </button>
                     </form>
                 }
-                else
-                {
-                    <button class="btn btn-sm btn-success text-white" disabled title="Todos los correos de esta comuna ya fueron enviados">✓ Enviada</button>
-                }
                 <form method="post" class="d-inline" onsubmit="return confirm('¿Eliminar esta petición?');">
                     <input type="hidden" name="id" value="@p.Id" />
-                    <button asp-page-handler="Eliminar" class="btn btn-sm btn-outline-danger">✕</button>
+                    <button asp-page-handler="Eliminar" class="btn btn-sm btn-outline-danger" title="Eliminar">✕</button>
                 </form>
             </td>
         </tr>
@@ -192,6 +201,10 @@
     }
     </tbody>
 </table>
+</div>
+<div class="d-flex justify-content-between text-muted mt-2" style="font-size:.75rem;">
+    <span>Pendientes arriba en el orden del Excel · enviadas abajo por fecha de envío, la más nueva primero</span>
+    <span>Respaldo automático de la base antes de importar o borrar</span>
 </div>
 
 @section Scripts {
@@ -216,7 +229,6 @@
                   btn.textContent = res.marcada ? "☑" : "☐";
                   var fila = document.getElementById("fila-" + id);
                   if (fila) {
-                      fila.classList.toggle("table-info", res.marcada);
                       fila.classList.toggle("fila-marcada", res.marcada);
                   }
               }).catch(function () {
