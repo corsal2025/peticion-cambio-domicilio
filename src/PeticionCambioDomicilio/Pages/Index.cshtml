@@ -103,17 +103,29 @@
     {
         var pendientesComuna = Model.PendientesPorComuna.TryGetValue(p.Comuna, out var n) ? n : 0;
         var esEnviada = p.Estado == EstadoPeticion.Enviada;
-        var claseFila = p.Marcada
-            ? "fila-marcada"
-            : esEnviada
-                ? "fila-enviada"
-                : p.Estado == EstadoPeticion.SinCorreoComuna
-                    ? "fila-sincorreo"
-                    : p.Estado == EstadoPeticion.Error
-                        ? "fila-error"
-                        : p.RutInvalido
-                            ? "fila-rutinvalido"
-                            : "fila-pendiente";
+        var esResuelta = p.SubidaEn is not null;
+        var claseFila = esResuelta
+            ? "fila-resuelta"
+            : p.Marcada
+                ? "fila-marcada"
+                : esEnviada
+                    ? "fila-enviada"
+                    : p.Estado == EstadoPeticion.SinCorreoComuna
+                        ? "fila-sincorreo"
+                        : p.Estado == EstadoPeticion.Error
+                            ? "fila-error"
+                            : p.RutInvalido
+                                ? "fila-rutinvalido"
+                                : "fila-pendiente";
+
+        int? diasCierre = null;
+        if (esResuelta && p.EnviadaEn is { } envio)
+        {
+            var iniCierre = DateOnly.FromDateTime(envio.LocalDateTime);
+            diasCierre = p.SubidaEn!.Value <= iniCierre
+                ? 0
+                : DeadlineCalculator.BusinessDaysBetween(iniCierre, p.SubidaEn.Value);
+        }
 
         var plazo = PlazoInfo.Para(p);
         var pct = plazo.Inicio is null
@@ -162,7 +174,13 @@
                 }
             </td>
             <td>
-                @if (plazo.Inicio is null)
+                @if (esResuelta)
+                {
+                    <span class="plazo-txt" style="color:var(--done-ink);font-weight:700;" title="Carpeta subida el @p.SubidaEn!.Value.ToString("dd-MM-yyyy")">
+                        ✓ Cerrada@(diasCierre is not null ? $" · {diasCierre} d. háb." : "")
+                    </span>
+                }
+                else if (plazo.Inicio is null)
                 {
                     <span class="plazo-txt text-muted">El reloj parte al enviar</span>
                 }

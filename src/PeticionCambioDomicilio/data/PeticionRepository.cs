@@ -105,6 +105,18 @@ public sealed class PeticionRepository
             alter.CommandText = $"ALTER TABLE Peticion ADD COLUMN {columna} {definicion};";
             alter.ExecuteNonQuery();
         }
+
+        // Invariante: SubidaEn con valor ⟺ la carpeta figura subida. Reconcilia filas de
+        // bases viejas donde se revirtió el estado sin limpiar la fecha.
+        using var fix = cn.CreateCommand();
+        fix.CommandText = """
+            UPDATE Peticion SET SubidaEn = NULL
+             WHERE SubidaEn IS NOT NULL
+               AND EstadoCarpeta NOT IN (
+                   'CAMBIO DOM. SUBIDO A CONASET', 'CAMBIO DOM. SUBIDO CON CORREO',
+                   'SUBIDA A CONASET', 'SUBIDA CON F8', 'SUBIDA CON OFICIO');
+            """;
+        fix.ExecuteNonQuery();
     }
 
     private static bool ColumnExists(SqliteConnection cn, string column)
@@ -181,12 +193,17 @@ public sealed class PeticionRepository
     {
         using var cn = Open();
         using var cmd = cn.CreateCommand();
-        // Pendientes arriba, en el orden del Excel. Enviadas abajo, de la más nueva a la más
-        // antigua (EnviadaEn es ISO 8601, el orden de texto coincide con el cronológico).
-        // Las pendientes tienen EnviadaEn NULL, así que ese criterio no las mueve.
+        // Tres bloques:
+        //   0 · pendientes  → arriba, en el orden del Excel
+        //   1 · enviadas sin resolver → al medio, de la más nueva a la más antigua
+        //   2 · resueltas (carpeta subida) → al final, por orden de resolución (SubidaEn ascendente)
+        // SubidaEn / EnviadaEn son ISO 8601, el orden de texto coincide con el cronológico.
         cmd.CommandText = """
             SELECT * FROM Peticion
-             ORDER BY CASE WHEN Estado = 1 THEN 1 ELSE 0 END ASC,
+             ORDER BY CASE WHEN SubidaEn IS NOT NULL THEN 2
+                           WHEN Estado = 1 THEN 1
+                           ELSE 0 END ASC,
+                      CASE WHEN SubidaEn IS NOT NULL THEN SubidaEn END ASC,
                       EnviadaEn DESC,
                       OrdenImportacion ASC,
                       Id ASC;
@@ -247,7 +264,8 @@ public sealed class PeticionRepository
         }
         else
         {
-            cmd.CommandText = "UPDATE Peticion SET EstadoCarpeta = $e WHERE Id = $id;";
+            // Volver a un estado anterior (p. ej. "sin subir") descarta la fecha de resolución.
+            cmd.CommandText = "UPDATE Peticion SET EstadoCarpeta = $e, SubidaEn = NULL WHERE Id = $id;";
         }
 
         cmd.Parameters.AddWithValue("$e", estado);
