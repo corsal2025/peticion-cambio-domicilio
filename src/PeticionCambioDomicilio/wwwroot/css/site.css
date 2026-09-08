@@ -66,11 +66,11 @@ h1.h3 { font-size: 1.25rem; }
 
 /* --- Distinción visual de estados de envío --- */
 .table > tbody > tr.fila-enviada {
-  background-color: #e8f5e9 !important;
+  background-color: #c8e6c9 !important;
   border-left: 4px solid #2e7d32;
 }
 .table > tbody > tr.fila-enviada:hover {
-  background-color: #d7edd9 !important;
+  background-color: #b2dfb5 !important;
 }
 .table > tbody > tr.fila-enviada td {
   background-color: transparent !important;
