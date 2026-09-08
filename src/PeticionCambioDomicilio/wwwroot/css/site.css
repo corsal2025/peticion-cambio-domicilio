@@ -22,6 +22,7 @@
   --warn-ink: #9a6212; --warn-bg: #fbf0dd;  --warn-rail: #d99513; --warn-chip: #fbe6c4;
   --bad-ink: #b23636;  --bad-bg: #fbe9e9;   --bad-rail: #d24848;  --bad-chip: #f6d8d8;
   --mark-ink: #0f5c6b; --mark-bg: #e3eef0;  --mark-rail: #2f8fa3;
+  --done-ink: #1f5a94; --done-bg: #e1ecfa;  --done-rail: #2c6fb0; --done-chip: #cfe0f6;
 
   --radius: 8px;
   --radius-sm: 6px;
@@ -266,6 +267,8 @@ main { padding-top: 1.4rem; }
 .carpeta-select {
   font-size: .78rem;
   font-weight: 600;
+  text-align: center;
+  text-transform: uppercase;
   padding: .22rem .45rem;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
@@ -274,6 +277,7 @@ main { padding-top: 1.4rem; }
   max-width: 200px;
   cursor: pointer;
 }
+.carpeta-select option { text-align: center; text-transform: uppercase; }
 .carpeta-select:hover { border-color: var(--accent); }
 .carpeta-fecha { font-size: .68rem; font-weight: 600; color: var(--ok-ink); margin-top: .2rem; }
 
@@ -298,6 +302,12 @@ main { padding-top: 1.4rem; }
 .table > tbody > tr.fila-marcada > td { background: var(--mark-bg) !important; }
 .table > tbody > tr.fila-marcada > td:first-child { box-shadow: inset 3px 0 0 var(--mark-rail); }
 .table > tbody > tr.fila-marcada:hover > td { background: #d4e7ec !important; }
+
+/* Carpeta subida = proceso terminado: fila azul, al final de la lista. */
+.table > tbody > tr.fila-resuelta > td { background: var(--done-bg) !important; color: var(--done-ink); }
+.table > tbody > tr.fila-resuelta > td:first-child { box-shadow: inset 3px 0 0 var(--done-rail); }
+.table > tbody > tr.fila-resuelta:hover > td { background: #d2e2f6 !important; }
+.table > tbody > tr.fila-resuelta > td.dato { color: var(--done-ink); }
 
 /* ---------- Directorio de comunas / config ---------- */
 .table-striped > tbody > tr:nth-of-type(odd) > td { background: #fafaf8; }
