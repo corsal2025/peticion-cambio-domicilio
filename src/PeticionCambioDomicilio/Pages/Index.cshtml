@@ -66,10 +66,13 @@
             Actualizar carpetas desde el Excel
         </button>
     </form>
-    <form method="post" onsubmit="return confirm('Se envía UN correo por comuna con las personas MARCADAS (✓) de esa comuna@(Model.ModoPruebaEmail is null ? "" : " (MODO PRUEBA: nada llega a las municipalidades)"). ¿Continuar?');">
-        <button asp-page-handler="EnviarMarcadas" class="btn btn-sm btn-outline-primary"
+    <form method="post" class="js-enviar-marcadas"
+          onsubmit="return confirm('Se envía UN correo por comuna con las personas MARCADAS (✓) de esa comuna@(Model.ModoPruebaEmail is null ? "" : " (MODO PRUEBA: nada llega a las municipalidades)"). ¿Continuar?');">
+        <button asp-page-handler="EnviarMarcadas" id="btn-enviar-marcadas"
+                class="btn btn-sm btn-outline-primary"
+                data-count="@Model.MarcadasPendientes"
                 disabled="@(Model.MarcadasPendientes == 0 ? "disabled" : null)">
-            Enviar marcadas (@Model.MarcadasPendientes)
+            Enviar marcadas (<span class="js-marcadas-n">@Model.MarcadasPendientes</span>)
         </button>
     </form>
     <span class="spacer"></span>
@@ -136,7 +139,7 @@
             : plazo.Vencido ? "plazo--bad" : plazo.DiasRestantes <= 3 ? "plazo--warn" : "plazo--ok";
         var envioTitulo = !string.IsNullOrEmpty(p.DetalleEstado) ? p.DetalleEstado : null;
 
-        <tr id="fila-@p.Id" class="@claseFila">
+        <tr id="fila-@p.Id" class="@claseFila" data-pendiente="@(esEnviada ? "0" : "1")">
             <td class="text-center">
                 <form method="post" class="d-inline js-marcar" data-id="@p.Id">
                     <input type="hidden" name="id" value="@p.Id" />
@@ -258,8 +261,31 @@
 
 @section Scripts {
 <script>
-    // Marcar/desmarcar sin recargar la pagina.
+    // Mantiene sincronizado el contador del botón "Enviar marcadas (N)" cuando se marca/desmarca
+    // sin recargar la página. Solo cuentan las filas pendientes (data-pendiente="1").
+    function ajustarContadorMarcadas(fila, marcada) {
+        if (!fila || fila.dataset.pendiente !== "1") return;
+        var btn = document.getElementById("btn-enviar-marcadas");
+        if (!btn) return;
+        var n = (parseInt(btn.dataset.count, 10) || 0) + (marcada ? 1 : -1);
+        if (n < 0) n = 0;
+        btn.dataset.count = n;
+        var span = btn.querySelector(".js-marcadas-n");
+        if (span) span.textContent = n;
+        btn.disabled = n === 0;
+    }
 
+    // Feedback al enviar marcadas: puede tardar (una pausa entre comunas). Evita el doble clic.
+    var formEnviar = document.querySelector("form.js-enviar-marcadas");
+    if (formEnviar) {
+        formEnviar.addEventListener("submit", function (ev) {
+            if (ev.defaultPrevented) return; // el confirm() se canceló
+            var b = document.getElementById("btn-enviar-marcadas");
+            if (b) { b.disabled = true; b.textContent = "Enviando… puede tardar unos segundos"; }
+        });
+    }
+
+    // Marcar/desmarcar sin recargar la pagina.
     document.querySelectorAll("form.js-marcar").forEach(function (form) {
         form.addEventListener("submit", function (ev) {
             ev.preventDefault();
@@ -279,6 +305,7 @@
                   var fila = document.getElementById("fila-" + id);
                   if (fila) {
                       fila.classList.toggle("fila-marcada", res.marcada);
+                      ajustarContadorMarcadas(fila, res.marcada);
                   }
               }).catch(function () {
                   form.submit(); // si falla el fetch, envio normal
