@@ -9,6 +9,7 @@
          Los modos de linea de comandos se reenganchan a la consola del padre
          (ver ConsoleAttach en Program.cs). -->
     <OutputType>WinExe</OutputType>
+    <ApplicationIcon>logo-municipal.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
