@@ -237,10 +237,12 @@ public sealed class PeticionRepository
                SET Estado = $estado,
                    DetalleEstado = $detalle,
                    EnviadaEn = $enviada,
-                   DestinatariosCorreo = $dest
+                   DestinatariosCorreo = $dest,
+                   Marcada = CASE WHEN $limpiarMarca = 1 THEN 0 ELSE Marcada END
              WHERE Id = $id;
             """;
         cmd.Parameters.AddWithValue("$estado", (int)estado);
+        cmd.Parameters.AddWithValue("$limpiarMarca", estado == EstadoPeticion.Enviada ? 1 : 0);
         cmd.Parameters.AddWithValue("$detalle", (object?)detalle ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$enviada", (object?)enviadaEn?.ToString("o") ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$dest", (object?)destinatarios ?? DBNull.Value);

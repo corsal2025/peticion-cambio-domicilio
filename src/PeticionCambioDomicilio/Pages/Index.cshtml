@@ -58,12 +58,12 @@
 
 <div class="toolbar mb-2">
     <form method="post">
-        <button asp-page-handler="Importar" class="btn btn-sm btn-primary">Importar / actualizar desde Excel</button>
+        <button asp-page-handler="Importar" class="btn btn-sm btn-primary">Cargar cambios de domicilio</button>
     </form>
     <form method="post">
         <button asp-page-handler="ActualizarCarpetas" class="btn btn-sm btn-outline-primary"
                 title="Busca en el libro el estado de la carpeta de cada persona (por RUT) y lo actualiza si figura más avanzado">
-            Actualizar carpetas desde el Excel
+            Actualizar estado solicitud
         </button>
     </form>
     <form method="post" class="js-enviar-marcadas"
@@ -89,7 +89,10 @@
 <table class="table table-hover align-middle">
     <thead>
         <tr>
-            <th class="text-center" style="width:1%">✓</th>
+            <th class="text-center" style="width:1%">
+                <input type="checkbox" id="chk-marcar-todas" title="Marcar / desmarcar todas las pendientes"
+                       checked="@(pendientes > 0 && Model.MarcadasPendientes == pendientes ? "checked" : null)" />
+            </th>
             <th>Nombre</th>
             <th>RUT</th>
             <th class="text-center">Comuna</th>
@@ -285,32 +288,51 @@
         });
     }
 
-    // Marcar/desmarcar sin recargar la pagina.
+    // Marcar/desmarcar sin recargar la pagina. Reutilizable desde el checkbox "marcar todas".
+    function marcarFila(form) {
+        var id = form.dataset.id;
+        var btn = form.querySelector(".js-marcar-btn");
+        var url = form.getAttribute("action") || (location.pathname + "?handler=Marcar");
+        var data = new FormData(form);
+        var token = form.querySelector('input[name="__RequestVerificationToken"]');
+        btn.disabled = true;
+        return fetch(url, {
+            method: "POST",
+            headers: { "X-Requested-With": "fetch", "RequestVerificationToken": token ? token.value : "" },
+            body: data
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+              btn.textContent = res.marcada ? "☑" : "☐";
+              var fila = document.getElementById("fila-" + id);
+              if (fila) {
+                  fila.classList.toggle("fila-marcada", res.marcada);
+                  ajustarContadorMarcadas(fila, res.marcada);
+              }
+          }).catch(function () {
+              form.submit(); // si falla el fetch, envio normal
+          }).finally(function () { btn.disabled = false; });
+    }
+
     document.querySelectorAll("form.js-marcar").forEach(function (form) {
         form.addEventListener("submit", function (ev) {
             ev.preventDefault();
-            var id = form.dataset.id;
-            var btn = form.querySelector(".js-marcar-btn");
-            var url = form.getAttribute("action") || (location.pathname + "?handler=Marcar");
-            var data = new FormData(form);
-            var token = form.querySelector('input[name="__RequestVerificationToken"]');
-            btn.disabled = true;
-            fetch(url, {
-                method: "POST",
-                headers: { "X-Requested-With": "fetch", "RequestVerificationToken": token ? token.value : "" },
-                body: data
-            }).then(function (r) { return r.json(); })
-              .then(function (res) {
-                  btn.textContent = res.marcada ? "☑" : "☐";
-                  var fila = document.getElementById("fila-" + id);
-                  if (fila) {
-                      fila.classList.toggle("fila-marcada", res.marcada);
-                      ajustarContadorMarcadas(fila, res.marcada);
-                  }
-              }).catch(function () {
-                  form.submit(); // si falla el fetch, envio normal
-              }).finally(function () { btn.disabled = false; });
+            marcarFila(form);
         });
     });
+
+    // Checkbox de cabecera: marca/desmarca todas las filas pendientes (las ya enviadas no cuentan).
+    var chkTodas = document.getElementById("chk-marcar-todas");
+    if (chkTodas) {
+        chkTodas.addEventListener("change", function () {
+            var deseada = chkTodas.checked;
+            document.querySelectorAll('tr[data-pendiente="1"] form.js-marcar').forEach(function (form) {
+                var btn = form.querySelector(".js-marcar-btn");
+                var marcadaActual = btn.textContent.trim() === "☑";
+                if (marcadaActual !== deseada) {
+                    marcarFila(form);
+                }
+            });
+        });
+    }
 </script>
 }
