@@ -24,6 +24,8 @@
         .n { width: 32px; text-align: center; }
         .firma { margin-top: 60px; display: flex; gap: 80px; }
         .firma div { border-top: 1px solid #333; padding-top: 4px; width: 220px; text-align: center; font-size: 11px; }
+        .encabezado { display: flex; align-items: center; gap: 14px; margin-bottom: 2px; }
+        .encabezado img { height: 48px; }
         @@media print {
             .barra { display: none; }
             body { margin: 0; }
@@ -36,7 +38,10 @@
         <button onclick="window.close()">Cerrar</button>
     </div>
 
-    <h1>Municipalidad de Valparaíso — Departamento de Licencias de Conducir</h1>
+    <div class="encabezado">
+        <img src="/img/logo-municipal.png" alt="Municipalidad de Valparaíso" />
+        <h1>Municipalidad de Valparaíso — Departamento de Licencias de Conducir</h1>
+    </div>
     <h1>@Model.Titulo</h1>
     <div class="sub">
         Solicitudes de carpeta a otras comunas conforme al artículo 14 del Decreto N.º 170 (MTT).

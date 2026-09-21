@@ -13,7 +13,10 @@
     <header>
         <nav class="navbar navbar-expand-sm navbar-light bg-white border-bottom mb-0">
             <div class="container">
-                <a class="navbar-brand" asp-page="/Index">Cambio de Domicilio</a>
+                <a class="navbar-brand d-flex align-items-center gap-2" asp-page="/Index">
+                    <img src="~/img/logo-municipal.png" alt="Municipalidad de Valparaíso" height="36" />
+                    Cambio de Domicilio
+                </a>
                 @{
                     var pagina = ViewContext.RouteData.Values["page"]?.ToString() ?? "";
                     string NavClass(string p) => "nav-link" + (string.Equals(pagina, p, StringComparison.OrdinalIgnoreCase) ? " active" : "");
