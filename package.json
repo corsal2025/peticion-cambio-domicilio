@@ -1,0 +1,20 @@
+{
+  "name": "peticion-cambio-domicilio",
+  "version": "1.0.0",
+  "description": "Dashboard de peticiones de cambio de domicilio (Cloudflare Pages + D1)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "dev": "wrangler pages dev public"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

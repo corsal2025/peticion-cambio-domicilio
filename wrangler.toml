@@ -1,0 +1,15 @@
+name = "peticion-cambio-domicilio"
+pages_build_output_dir = "public"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "peticion-cambio-domicilio-db"
+database_id = "REEMPLAZAR-DESPUES-DE-wrangler-d1-create"
+migrations_dir = "migrations"
+
+# Variables secretas (SESSION_SECRET, MASTER_PIN, IMPORT_SECRET, RELAY_SECRET,
+# y si se usa MAIL_MODE=direct: EWS_USER/EWS_PASS) se configuran con
+# `wrangler pages secret put` despues de crear el proyecto Pages. Pages no usa
+# un bloque [vars] en wrangler.toml como los Workers "sueltos".
