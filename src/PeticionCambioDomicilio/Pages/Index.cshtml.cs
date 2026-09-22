@@ -54,6 +54,9 @@ public sealed class IndexModel : PageModel
     /// <summary>Marcadas (columna ✓) que todavía no se enviaron — para el botón "Enviar marcadas (N)".</summary>
     public int MarcadasPendientes { get; private set; }
 
+    /// <summary>Comunas del directorio, para el desplegable de carga manual.</summary>
+    public IReadOnlyList<string> ComunaNombres { get; private set; } = Array.Empty<string>();
+
     private static bool EsPendiente(Peticion p) =>
         p.Estado is EstadoPeticion.Borrador or EstadoPeticion.SinCorreoComuna or EstadoPeticion.Error;
 
@@ -66,6 +69,7 @@ public sealed class IndexModel : PageModel
             .GroupBy(p => p.Comuna, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
         MarcadasPendientes = Peticiones.Count(p => p.Marcada && EsPendiente(p));
+        ComunaNombres = _directory.ComunaNames();
     }
 
     public IActionResult OnPostImportar()
@@ -242,6 +246,49 @@ public sealed class IndexModel : PageModel
         TempData["Flash"] = backup is not null
             ? $"Se borraron {n} petición(es). Respaldo guardado en {backup}. Reimportá del Excel cuando quieras."
             : $"Se borraron {n} petición(es). ATENCIÓN: no se pudo guardar respaldo. El historial de envío se perdió.";
+        return RedirectToPage();
+    }
+
+    /// <summary>
+    /// Carga a mano una petición que el Excel no trae (caso que no se detecta de forma
+    /// automática). Misma clave de deduplicación que la importación: RUT + comuna — si ya
+    /// existe, se actualiza en vez de duplicar.
+    /// </summary>
+    public IActionResult OnPostAgregarManual(string nombre, string rut, string comuna)
+    {
+        nombre = (nombre ?? "").Trim();
+        rut = (rut ?? "").Trim();
+        comuna = (comuna ?? "").Trim();
+
+        if (nombre.Length == 0 || rut.Length == 0 || comuna.Length == 0)
+        {
+            TempData["Flash"] = "Para agregar a mano hacen falta nombre, RUT y comuna.";
+            return RedirectToPage();
+        }
+
+        var comunaCanonica = _directory.ResolveComunaName(comuna) ?? comuna.ToUpperInvariant();
+        var rutNormalizado = RutValidator.NormalizeAndValidate(rut);
+        var rutInvalido = rutNormalizado is null;
+
+        var orden = _repository.All().Select(p => p.OrdenImportacion).DefaultIfEmpty(0).Max() + 1;
+
+        var peticion = new Peticion
+        {
+            NombreCompleto = nombre,
+            Rut = rutNormalizado ?? rut,
+            Comuna = comunaCanonica,
+            Origen = "Ingreso manual",
+            Oficina = Peticion.OficinaManual,
+            OrdenImportacion = orden,
+            RutInvalido = rutInvalido,
+            Estado = EstadoPeticion.Borrador,
+        };
+
+        var esNueva = _repository.AddIfNew(peticion);
+        TempData["Flash"] = esNueva
+            ? $"Petición agregada a mano: {nombre} → {comunaCanonica}." + (rutInvalido ? " ⚠ RUT no validado, revisar." : "")
+            : $"{nombre} ({rut}) ya existía para {comunaCanonica} — se actualizaron sus datos.";
+
         return RedirectToPage();
     }
 

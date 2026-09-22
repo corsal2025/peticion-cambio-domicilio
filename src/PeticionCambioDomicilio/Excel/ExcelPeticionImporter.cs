@@ -342,7 +342,9 @@ public sealed class ExcelPeticionImporter
             foreach (var vieja in existentes)
             {
                 var esBorradorLimpio = vieja.Estado == EstadoPeticion.Borrador && !vieja.Marcada;
-                if (esBorradorLimpio && !vistas.Contains(vieja.Rut + "|" + vieja.Comuna))
+                // Las cargadas a mano no vienen del Excel por definición: nunca son obsoletas.
+                var esManual = vieja.Oficina == Peticion.OficinaManual;
+                if (esBorradorLimpio && !esManual && !vistas.Contains(vieja.Rut + "|" + vieja.Comuna))
                 {
                     borrar(vieja.Id);
                     obsoletas++;

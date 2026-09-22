@@ -14,6 +14,9 @@ public enum EstadoPeticion
 /// </summary>
 public sealed class Peticion
 {
+    /// <summary>Oficina de las peticiones cargadas a mano (no vienen de ninguna hoja del Excel).</summary>
+    public const string OficinaManual = "MANUAL";
+
     public long Id { get; set; }
     public required string NombreCompleto { get; set; }
     public required string Rut { get; set; }

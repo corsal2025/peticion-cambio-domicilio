@@ -70,7 +70,7 @@
                 <td>@p.NombreCompleto</td>
                 <td class="rut">@p.Rut</td>
                 <td>@p.Comuna</td>
-                <td class="fecha">@(p.FechaSolicitud?.ToString("dd-MM-yyyy") ?? "—")</td>
+                <td class="fecha">@(p.EnviadaEn?.LocalDateTime.ToString("dd-MM-yyyy") ?? "— sin pedir")</td>
                 <td class="fecha">@(p.EnviadaEn is not null ? p.EnviadaEn.Value.ToString("dd-MM-yyyy HH:mm") : "— sin enviar")</td>
                 <td>@p.EstadoCarpeta</td>
             </tr>
