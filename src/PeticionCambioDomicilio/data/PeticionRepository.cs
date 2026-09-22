@@ -117,6 +117,23 @@ public sealed class PeticionRepository
                    'SUBIDA A CONASET', 'SUBIDA CON F8', 'SUBIDA CON OFICIO');
             """;
         fix.ExecuteNonQuery();
+
+        // Comunas que estuvieron mal escritas en el directorio: las peticiones guardadas con el
+        // nombre viejo pasan al corregido. Si no, la próxima importación calza con el nombre nuevo,
+        // no encuentra la clave (Rut, Comuna) y crea un duplicado que se volvería a enviar.
+        // Se salta la fila si ya existe la misma persona con el nombre corregido (índice único).
+        foreach (var (mal, bien) in new[] { ("CONCECPION", "CONCEPCION") })
+        {
+            using var rename = cn.CreateCommand();
+            rename.CommandText = """
+                UPDATE Peticion SET Comuna = $bien
+                 WHERE Comuna = $mal
+                   AND NOT EXISTS (SELECT 1 FROM Peticion p2 WHERE p2.Rut = Peticion.Rut AND p2.Comuna = $bien);
+                """;
+            rename.Parameters.AddWithValue("$mal", mal);
+            rename.Parameters.AddWithValue("$bien", bien);
+            rename.ExecuteNonQuery();
+        }
     }
 
     private static bool ColumnExists(SqliteConnection cn, string column)
