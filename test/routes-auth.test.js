@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { crearD1Fake } from './support/d1Fake.js';
 import { app } from '../worker/app.js';
-import { crearUsuario } from '../worker/lib/usuarios.js';
+import { crearUsuario, porUsuario } from '../worker/lib/usuarios.js';
 
 function env(db) {
   return { DB: db, SESSION_SECRET: 'secreto-test', MASTER_PIN: '1234' };
@@ -158,6 +158,48 @@ test('rate limit global: tope por usuario aunque cada intento venga de una CF-Co
     body: JSON.stringify({ usuario: 'rotador', clave: '1234' }),
   }, e);
   assert.equal(res.status, 429);
+});
+
+test('login matchea el usuario guardado aunque se ingresen espacios/mayusculas distintas', async () => {
+  const db = crearD1Fake();
+  const e = env(db);
+  await crearUsuario(db, { usuario: 'jperez', rol: 'staff', clave: 'clave123' });
+
+  const res = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: '  JPerez ', clave: 'clave123' }),
+  }, e);
+  assert.equal(res.status, 200);
+  const cuerpo = await res.json();
+  assert.equal(cuerpo.usuario, 'jperez');
+});
+
+test('login con filas duplicadas (mismo nombre normalizado): prueba la clave contra cada candidato', async () => {
+  const db = crearD1Fake();
+  const e = env(db);
+  // Simula el estado de produccion: dos filas que normalizan a "raul", creadas
+  // antes de la normalizacion (una con espacio final, otra distinta mayuscula).
+  // Insertadas directo por SQL (no via crearUsuario) porque el alta ya
+  // rechaza nombres duplicados normalizados; esto reproduce datos viejos.
+  const dbTemp = crearD1Fake();
+  await crearUsuario(dbTemp, { usuario: 'raul-temp', clave: 'clave-correcta' });
+  const { hash, salt } = await porUsuario(dbTemp, 'raul-temp');
+
+  await db.prepare('INSERT INTO usuarios (usuario, nombre, rol) VALUES (?, ?, ?)').bind('RAUL ', 'Raul viejo', 'staff').run();
+  await db
+    .prepare('INSERT INTO usuarios (usuario, nombre, rol, hash, salt) VALUES (?, ?, ?, ?, ?)')
+    .bind('Raul', 'Raul nuevo', 'admin', hash, salt)
+    .run();
+
+  const res = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'raul', clave: 'clave-correcta' }),
+  }, e);
+  assert.equal(res.status, 200);
+  const cuerpo = await res.json();
+  assert.equal(cuerpo.rol, 'admin');
 });
 
 test('login con clave incorrecta responde 401', async () => {

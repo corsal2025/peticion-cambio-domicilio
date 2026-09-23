@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { crearD1Fake } from './support/d1Fake.js';
 import {
   claveIntento,
+  claveUsuarioGlobal,
   estaBloqueado,
   registrarFallo,
   limpiarFallos,
@@ -31,6 +32,11 @@ test('limpiarFallos desbloquea inmediatamente', async () => {
   for (let i = 0; i < MAX_FALLOS; i++) await registrarFallo(db, clave);
   await limpiarFallos(db, clave);
   assert.equal(await estaBloqueado(db, clave), false);
+});
+
+test('claveIntento y claveUsuarioGlobal normalizan el usuario (trim + lowercase)', () => {
+  assert.equal(claveIntento('1.2.3.4', '  Jefe '), claveIntento('1.2.3.4', 'jefe'));
+  assert.equal(claveUsuarioGlobal('  Jefe '), claveUsuarioGlobal('jefe'));
 });
 
 test('claves distintas (ip o usuario) no se afectan entre si', async () => {

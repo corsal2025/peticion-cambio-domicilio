@@ -8,11 +8,14 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MIGRACION = path.join(__dirname, '..', '..', 'migrations', '0001_init.sql');
+const DIR_MIGRACIONES = path.join(__dirname, '..', '..', 'migrations');
+const MIGRACIONES = ['0001_init.sql', '0002_normalizar_usuarios.sql'];
 
 export function crearD1Fake() {
   const sqlite = new DatabaseSync(':memory:');
-  sqlite.exec(readFileSync(MIGRACION, 'utf8'));
+  for (const archivo of MIGRACIONES) {
+    sqlite.exec(readFileSync(path.join(DIR_MIGRACIONES, archivo), 'utf8'));
+  }
   return wrap(sqlite);
 }
 

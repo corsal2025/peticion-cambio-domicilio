@@ -11,14 +11,19 @@ export const VENTANA_MS = 15 * 60 * 1000;
 export const MAX_FALLOS_GLOBAL = 20;
 export const VENTANA_GLOBAL_MS = 60 * 60 * 1000;
 
+/** Nombre de usuario normalizado (trim + lowercase) para armar claves de rate limit. */
+function normalizar(usuario) {
+  return String(usuario || '').trim().toLowerCase();
+}
+
 /** Clave de rate limit por IP: combina IP y usuario para no bloquear a todos por una IP compartida sola. */
 export function claveIntento(ip, usuario) {
-  return `${ip || 'sin-ip'}:${String(usuario || '').toLowerCase()}`;
+  return `${ip || 'sin-ip'}:${normalizar(usuario)}`;
 }
 
 /** Clave de rate limit global por usuario (sin IP), para el tope (2). */
 export function claveUsuarioGlobal(usuario) {
-  return `global:${String(usuario || '').toLowerCase()}`;
+  return `global:${normalizar(usuario)}`;
 }
 
 async function fallosVigentes(db, clave, ventanaMs, ahora) {
