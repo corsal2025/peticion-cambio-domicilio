@@ -7,6 +7,8 @@
 // worker/routes/auth.js (Batch 6); este modulo es la primitiva pura de
 // firmar/verificar + politica de PIN maestro.
 
+import { timingSafeEqual } from './seguridad.js';
+
 export const MAX_EDAD_MS = 12 * 60 * 60 * 1000; // 12 horas
 
 function base64UrlEncode(bytes) {
@@ -70,7 +72,7 @@ export async function verificarSesion(valorCookie, secreto) {
   }
 }
 
-/** true si `pinIngresado` coincide con el PIN maestro configurado (comparacion simple, no timing-safe: PIN corto de respaldo). */
+/** true si `pinIngresado` coincide con el PIN maestro configurado (comparacion en tiempo constante). */
 export function pinValido(pinIngresado, pinConfigurado) {
-  return Boolean(pinConfigurado) && String(pinIngresado) === String(pinConfigurado);
+  return Boolean(pinConfigurado) && timingSafeEqual(String(pinIngresado), String(pinConfigurado));
 }

@@ -8,13 +8,7 @@
 // cookie).
 import { Hono } from 'hono';
 import { importarFilas, finalizarImport } from '../lib/importar.js';
-
-function timingSafeEqual(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
-  let dif = 0;
-  for (let i = 0; i < a.length; i++) dif |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return dif === 0;
-}
+import { timingSafeEqual } from '../lib/seguridad.js';
 
 function secretoValido(c) {
   const secreto = c.req.header('X-Import-Secret') || '';

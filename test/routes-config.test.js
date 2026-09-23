@@ -11,7 +11,7 @@ async function cookieAdmin(e) {
   const res = await app.request('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ usuario: 'jefe', clave: '1234' }),
+    body: JSON.stringify({ usuario: 'admin', clave: '1234' }),
   }, e);
   return res.headers.get('set-cookie').split(';')[0];
 }

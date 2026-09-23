@@ -2,13 +2,7 @@
 // compartido, NO por sesion de usuario).
 import { Hono } from 'hono';
 import { obtenerPendientes, reportarResultado } from '../lib/relay.js';
-
-function timingSafeEqual(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
-  let dif = 0;
-  for (let i = 0; i < a.length; i++) dif |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return dif === 0;
-}
+import { timingSafeEqual } from '../lib/seguridad.js';
 
 function autenticado(c) {
   const secreto = c.req.header('X-Relay-Secret') || '';

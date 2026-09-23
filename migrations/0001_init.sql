@@ -116,3 +116,21 @@ CREATE TABLE IF NOT EXISTS import_lotes (
   hojas_leidas INTEGER,
   actualizado_en TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Rate limit de login: contador de fallos por clave (ip+usuario), con
+-- bloqueo temporal tras 5 fallos en 15 minutos. Un login exitoso borra la
+-- fila de esa clave.
+CREATE TABLE IF NOT EXISTS login_intentos (
+  clave         TEXT PRIMARY KEY,
+  fallos        INTEGER NOT NULL DEFAULT 0,
+  ultimo_fallo  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Vincula cada envio (un correo por comuna) con las peticiones especificas
+-- que incluyo, para que al marcar Enviada/EnviadaEn/plazo solo se toquen
+-- las peticiones de ESE envio y no cualquier EnCola de la misma comuna.
+CREATE TABLE IF NOT EXISTS envio_peticiones (
+  envio_id     INTEGER NOT NULL REFERENCES envios(id),
+  peticion_id  INTEGER NOT NULL REFERENCES peticiones(id),
+  PRIMARY KEY (envio_id, peticion_id)
+);

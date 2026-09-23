@@ -30,7 +30,7 @@ test('sin SESSION_SECRET pero con DEV=1, usa fallback local y funciona', async (
   const loginRes = await app.request('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ usuario: 'jefe', clave: '1234' }),
+    body: JSON.stringify({ usuario: 'admin', clave: '1234' }),
   }, e);
   assert.equal(loginRes.status, 200);
 });
@@ -41,13 +41,13 @@ test('GET /api/peticiones sin sesion responde 401', async () => {
   assert.equal(res.status, 401);
 });
 
-test('login con PIN maestro crea sesion admin y permite acceso', async () => {
+test('login con PIN maestro y usuario "admin" crea sesion admin y permite acceso', async () => {
   const db = crearD1Fake();
   const e = env(db);
   const loginRes = await app.request('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ usuario: 'jefe', clave: '1234' }),
+    body: JSON.stringify({ usuario: 'admin', clave: '1234' }),
   }, e);
   assert.equal(loginRes.status, 200);
   const cookie = loginRes.headers.get('set-cookie');
@@ -56,6 +56,72 @@ test('login con PIN maestro crea sesion admin y permite acceso', async () => {
   const cookieValor = cookie.split(';')[0];
   const protegidaRes = await app.request('/api/peticiones', { headers: { Cookie: cookieValor } }, e);
   assert.equal(protegidaRes.status, 200);
+});
+
+test('login con PIN maestro y usuario arbitrario inexistente NO otorga admin', async () => {
+  const db = crearD1Fake();
+  const res = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'quiensea', clave: '1234' }),
+  }, env(db));
+  assert.equal(res.status, 401);
+});
+
+test('login con PIN maestro sobre usuario staff EXISTENTE sin clave le da su propio rol, no admin', async () => {
+  const db = crearD1Fake();
+  const e = env(db);
+  await db.prepare('INSERT INTO usuarios (usuario, nombre, rol) VALUES (?, ?, ?)').bind('staffsinclave', 'staffsinclave', 'staff').run();
+  const loginRes = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'staffsinclave', clave: '1234' }),
+  }, e);
+  assert.equal(loginRes.status, 200);
+  const cuerpo = await loginRes.json();
+  assert.equal(cuerpo.rol, 'staff');
+});
+
+test('rate limit: bloquea login tras 5 fallos seguidos con la misma ip+usuario', async () => {
+  const db = crearD1Fake();
+  const e = env(db);
+  for (let i = 0; i < 5; i++) {
+    await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario: 'jefe', clave: 'mala' }),
+    }, e);
+  }
+  const res = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'jefe', clave: '1234' }),
+  }, e);
+  assert.equal(res.status, 429);
+});
+
+test('rate limit: login exitoso limpia el contador de fallos', async () => {
+  const db = crearD1Fake();
+  const e = env(db);
+  for (let i = 0; i < 4; i++) {
+    await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario: 'admin', clave: 'mala' }),
+    }, e);
+  }
+  const ok = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'admin', clave: '1234' }),
+  }, e);
+  assert.equal(ok.status, 200);
+  const siguiente = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'admin', clave: 'mala' }),
+  }, e);
+  assert.equal(siguiente.status, 401);
 });
 
 test('login con clave incorrecta responde 401', async () => {
