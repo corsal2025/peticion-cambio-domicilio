@@ -18,3 +18,17 @@ export async function setConfig(db, clave, valor) {
     .bind(clave, valor)
     .run();
 }
+
+/**
+ * Direccion "De:" para EWS (modo direct): manda mail.send_as (configurable
+ * desde /api/config sin redeploy) y si no esta seteada cae al secreto
+ * EWS_SEND_AS del entorno (comportamiento historico antes de exponer la
+ * config). Vacio/whitespace en config cuenta como "no seteada".
+ */
+export async function resolverSendAs(db, envSendAs) {
+  const configurado = await obtenerConfig(db, 'mail.send_as');
+  if (configurado && configurado.trim() !== '') {
+    return configurado.trim();
+  }
+  return envSendAs || null;
+}

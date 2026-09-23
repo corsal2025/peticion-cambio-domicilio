@@ -37,6 +37,42 @@ test('POST /api/mail/prueba sin test_email configurado responde 400', async () =
   assert.equal(res.status, 400);
 });
 
+test('POST /api/mail/prueba en modo direct usa mail.send_as de la config, no EWS_SEND_AS del env', async () => {
+  const db = crearD1Fake();
+  const e = {
+    DB: db,
+    SESSION_SECRET: 'secreto-test',
+    MASTER_PIN: '1234',
+    EWS_URL: 'https://ews.local/ews',
+    EWS_USER: 'usuario-ews',
+    EWS_PASS: 'clave-ews',
+    EWS_SEND_AS: 'fallback-env@muni.cl',
+  };
+  const headers = { Cookie: await cookieAdmin(e), 'Content-Type': 'application/json' };
+
+  await app.request('/api/config', {
+    method: 'PUT', headers,
+    body: JSON.stringify({ 'mail.mode': 'direct', 'mail.test_email': 'pruebas@muni.cl', 'mail.send_as': 'alias-config@muni.cl' }),
+  }, e);
+
+  const solicitudesFetch = [];
+  const fetchOriginal = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    solicitudesFetch.push({ url, body: opts.body });
+    return new Response('<Envelope/>', { status: 200 });
+  };
+  try {
+    const res = await app.request('/api/mail/prueba', { method: 'POST', headers }, e);
+    assert.equal(res.status, 200);
+  } finally {
+    globalThis.fetch = fetchOriginal;
+  }
+
+  assert.equal(solicitudesFetch.length, 1);
+  assert.match(solicitudesFetch[0].body, /alias-config@muni\.cl/);
+  assert.doesNotMatch(solicitudesFetch[0].body, /fallback-env@muni\.cl/);
+});
+
 test('GET /api/usuarios solo admin, alta de usuario', async () => {
   const db = crearD1Fake();
   const e = env(db);

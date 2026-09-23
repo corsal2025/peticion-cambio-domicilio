@@ -2,7 +2,7 @@
 // Incluye tambien /mail/prueba: envio de prueba a mail.test_email, crea una
 // peticion sintetica, la envia y la elimina (no queda rastro en el listado real).
 import { Hono } from 'hono';
-import { obtenerTodaLaConfig, setConfig, obtenerConfig } from '../lib/config.js';
+import { obtenerTodaLaConfig, setConfig, obtenerConfig, resolverSendAs } from '../lib/config.js';
 import { construirCorreo } from '../lib/plantilla.js';
 import { enviarEws } from '../lib/ews.js';
 
@@ -32,8 +32,9 @@ configRoutes.post('/mail/prueba', async (c) => {
   const modo = (await obtenerConfig(c.env.DB, 'mail.mode')) || 'relay';
   if (modo === 'direct') {
     try {
+      const sendAs = await resolverSendAs(c.env.DB, c.env.EWS_SEND_AS);
       await enviarEws(
-        { url: c.env.EWS_URL, usuario: c.env.EWS_USER, clave: c.env.EWS_PASS, sendAs: c.env.EWS_SEND_AS },
+        { url: c.env.EWS_URL, usuario: c.env.EWS_USER, clave: c.env.EWS_PASS, sendAs },
         { to: testEmail, subject: asunto, body: cuerpo },
       );
       return c.json({ ok: true, modo, destinatario: testEmail });

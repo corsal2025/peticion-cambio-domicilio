@@ -3,7 +3,7 @@
 import { Hono } from 'hono';
 import { normalizeAndValidate } from '../lib/rut.js';
 import { upsertPeticion, listarPeticiones, marcarPeticion, marcarTodas } from '../lib/peticiones.js';
-import { obtenerConfig } from '../lib/config.js';
+import { obtenerConfig, resolverSendAs } from '../lib/config.js';
 import { listarComunas } from '../lib/comunas.js';
 import { prepararEnvios, encolarEnvios, enviarDirecto } from '../lib/mail.js';
 import { plazoInfo } from '../lib/plazos.js';
@@ -101,7 +101,8 @@ peticionesRoutes.post('/peticiones/enviar', async (c) => {
 
   const modo = (await obtenerConfig(db, 'mail.mode')) || 'relay';
   if (modo === 'direct') {
-    const ewsOpciones = { url: c.env.EWS_URL, usuario: c.env.EWS_USER, clave: c.env.EWS_PASS, sendAs: c.env.EWS_SEND_AS };
+    const sendAs = await resolverSendAs(db, c.env.EWS_SEND_AS);
+    const ewsOpciones = { url: c.env.EWS_URL, usuario: c.env.EWS_USER, clave: c.env.EWS_PASS, sendAs };
     const { results: pendientesRecien } = await db.prepare("SELECT * FROM envios WHERE estado = 'pendiente'").all();
     for (const envio of pendientesRecien) {
       await enviarDirecto(db, envio, ewsOpciones);
