@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { firmarSesion, verificarSesion, pinValido, MAX_EDAD_MS } from '../lib/auth.js';
 import { porUsuario, verificarClave } from '../lib/usuarios.js';
-import { claveIntento, estaBloqueado, registrarFallo, limpiarFallos } from '../lib/loginRateLimit.js';
+import { claveIntento, estaBloqueado, estaBloqueadoGlobal, registrarFallo, limpiarFallos } from '../lib/loginRateLimit.js';
 
 const NOMBRE_COOKIE = 'peticion_sesion';
 const LIBRES = new Set(['/api/auth/login', '/api/auth/logout', '/api/auth/me']);
@@ -89,15 +89,20 @@ authRoutes.post('/auth/login', async (c) => {
   const { usuario, clave } = body || {};
   if (!usuario || !clave) return c.json({ error: 'Indica usuario y clave' }, 400);
 
-  const ip = c.req.header('CF-Connecting-IP') || c.req.header('x-forwarded-for') || 'sin-ip';
+  // Solo CF-Connecting-IP: es la cabecera que Cloudflare setea de verdad en
+  // el edge y NO se puede falsificar desde fuera. `x-forwarded-for` la puede
+  // mandar cualquier cliente con el valor que quiera, asi que usarla como
+  // fallback dejaba rotar la IP "declarada" para evadir el rate limit por
+  // clave ip+usuario.
+  const ip = c.req.header('CF-Connecting-IP') || 'sin-ip';
   const claveRate = claveIntento(ip, usuario);
-  if (await estaBloqueado(db, claveRate)) {
+  if ((await estaBloqueado(db, claveRate)) || (await estaBloqueadoGlobal(db, usuario))) {
     return c.json({ error: 'Demasiados intentos fallidos. Intenta de nuevo en unos minutos.' }, 429);
   }
 
   const u = await porUsuario(db, usuario);
   if (u && u.hash && (await verificarClave(clave, u.hash, u.salt))) {
-    await limpiarFallos(db, claveRate);
+    await limpiarFallos(db, claveRate, usuario);
     await establecerSesion(c, { usuario: u.usuario, rol: u.rol });
     return c.json({ ok: true, usuario: u.usuario, rol: u.rol });
   }
@@ -109,19 +114,19 @@ authRoutes.post('/auth/login', async (c) => {
       // sesion admin para el nombre fijo 'admin'. Nunca otorga admin a un
       // nombre de usuario arbitrario inventado en el login.
       if (u) {
-        await limpiarFallos(db, claveRate);
+        await limpiarFallos(db, claveRate, usuario);
         await establecerSesion(c, { usuario: u.usuario, rol: u.rol });
         return c.json({ ok: true, usuario: u.usuario, rol: u.rol });
       }
       if (String(usuario).toLowerCase() === 'admin') {
-        await limpiarFallos(db, claveRate);
+        await limpiarFallos(db, claveRate, usuario);
         await establecerSesion(c, { usuario: 'admin', rol: 'admin' });
         return c.json({ ok: true, usuario: 'admin', rol: 'admin' });
       }
     }
   }
 
-  await registrarFallo(db, claveRate);
+  await registrarFallo(db, claveRate, usuario);
   return c.json({ error: 'Usuario o clave incorrectos' }, 401);
 });
 

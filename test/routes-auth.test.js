@@ -124,6 +124,42 @@ test('rate limit: login exitoso limpia el contador de fallos', async () => {
   assert.equal(siguiente.status, 401);
 });
 
+test('rate limit: x-forwarded-for se ignora, solo CF-Connecting-IP cuenta', async () => {
+  const db = crearD1Fake();
+  const e = env(db);
+  for (let i = 0; i < 5; i++) {
+    await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '9.9.9.9', 'x-forwarded-for': `1.1.1.${i}` },
+      body: JSON.stringify({ usuario: 'zeta', clave: 'mala' }),
+    }, e);
+  }
+  const res = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '9.9.9.9', 'x-forwarded-for': 'no-deberia-importar' },
+    body: JSON.stringify({ usuario: 'zeta', clave: '1234' }),
+  }, e);
+  assert.equal(res.status, 429);
+});
+
+test('rate limit global: tope por usuario aunque cada intento venga de una CF-Connecting-IP distinta', async () => {
+  const db = crearD1Fake();
+  const e = env(db);
+  for (let i = 0; i < 20; i++) {
+    await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': `8.8.8.${i}` },
+      body: JSON.stringify({ usuario: 'rotador', clave: 'mala' }),
+    }, e);
+  }
+  const res = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '8.8.8.99' },
+    body: JSON.stringify({ usuario: 'rotador', clave: '1234' }),
+  }, e);
+  assert.equal(res.status, 429);
+});
+
 test('login con clave incorrecta responde 401', async () => {
   const db = crearD1Fake();
   const res = await app.request('/api/auth/login', {
