@@ -1,6 +1,7 @@
 // Dashboard de peticiones: buscador RUT/nombre, carga manual, marcar/marcar
 // todas (visibles), enviar marcadas, estado de carpeta, plazo legal.
 import { api, fold } from './api.js';
+import { esc } from './escape.js';
 
 const OPCIONES_CARPETA = [
   { valor: 'CAMBIO DE DOMICILIO SOLICITADO', etiqueta: '— sin subir —' },
@@ -66,7 +67,7 @@ function pintarFila(p) {
        </div>`;
 
   const opciones = OPCIONES_CARPETA.map(
-    (o) => `<option value="${o.valor}" ${opcionActual(p.estado_carpeta) === o.valor ? 'selected' : ''}>${o.etiqueta}</option>`,
+    (o) => `<option value="${esc(o.valor)}" ${opcionActual(p.estado_carpeta) === o.valor ? 'selected' : ''}>${esc(o.etiqueta)}</option>`,
   ).join('');
 
   const tr = document.createElement('tr');
@@ -77,17 +78,17 @@ function pintarFila(p) {
   tr.dataset.rut = String(p.rut || '').replace(/[^0-9kK]/g, '').toLowerCase();
 
   tr.innerHTML = `
-    <td class="text-center"><input type="checkbox" class="chk-marcar" ${p.marcada ? 'checked' : ''} /></td>
-    <td class="dato">${p.nombre_completo}</td>
-    <td class="dato num">${p.rut} ${p.rut_invalido ? '⚠' : ''}</td>
-    <td class="text-center"><span class="comuna-chip">${p.comuna}</span></td>
-    <td class="num">${formatearFecha(p.enviada_en)}</td>
-    <td><span class="pill ${pill.clase}">${pill.texto}</span></td>
+    <td class="text-center"><input type="checkbox" class="chk-marcar" ${esc(p.marcada ? 'checked' : '')} /></td>
+    <td class="dato">${esc(p.nombre_completo)}</td>
+    <td class="dato num">${esc(p.rut)} ${esc(p.rut_invalido ? '⚠' : '')}</td>
+    <td class="text-center"><span class="comuna-chip">${esc(p.comuna)}</span></td>
+    <td class="num">${esc(formatearFecha(p.enviada_en))}</td>
+    <td><span class="pill ${esc(pill.clase)}">${esc(pill.texto)}</span></td>
     <td>${plazoHtml}</td>
     <td>
       <select class="carpeta-select">${opciones}</select>
     </td>
-    <td class="text-muted" style="font-size:.78rem;">${p.oficina || ''}</td>
+    <td class="text-muted" style="font-size:.78rem;">${esc(p.oficina || '')}</td>
   `;
 
   tr.querySelector('.chk-marcar').addEventListener('change', (ev) => marcar(p.id, ev.target.checked));

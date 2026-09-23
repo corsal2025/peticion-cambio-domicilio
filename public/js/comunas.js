@@ -1,4 +1,5 @@
 import { api } from './api.js';
+import { esc } from './escape.js';
 
 const tbody = document.getElementById('tbody-comunas');
 
@@ -6,10 +7,10 @@ async function cargar() {
   const comunas = await api('/api/comunas');
   tbody.innerHTML = comunas.map((c) => `
     <tr>
-      <td>${c.nombre}</td>
-      <td>${c.correos || '<span class="text-muted">sin correo</span>'}</td>
-      <td>${c.contacto || ''}</td>
-      <td><button class="btn btn-sm btn-outline-danger" data-id="${c.id}">Eliminar</button></td>
+      <td>${esc(c.nombre)}</td>
+      <td>${c.correos ? esc(c.correos) : '<span class="text-muted">sin correo</span>'}</td>
+      <td>${esc(c.contacto || '')}</td>
+      <td><button class="btn btn-sm btn-outline-danger" data-id="${esc(c.id)}">Eliminar</button></td>
     </tr>
   `).join('');
   tbody.querySelectorAll('button[data-id]').forEach((btn) => {

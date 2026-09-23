@@ -1,4 +1,5 @@
 import { api } from './api.js';
+import { esc } from './escape.js';
 
 const form = document.getElementById('form-config');
 const mensaje = document.getElementById('mensaje');
@@ -20,7 +21,7 @@ async function cargarConfig() {
 async function cargarUsuarios() {
   const usuarios = await api('/api/usuarios');
   document.getElementById('lista-usuarios').innerHTML = usuarios
-    .map((u) => `<li>${u.usuario} — ${u.rol}${u.nombre ? ` (${u.nombre})` : ''}</li>`)
+    .map((u) => `<li>${esc(u.usuario)} — ${esc(u.rol)}${u.nombre ? ` (${esc(u.nombre)})` : ''}</li>`)
     .join('');
 }
 
