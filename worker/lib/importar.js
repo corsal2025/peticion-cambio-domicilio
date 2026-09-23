@@ -162,8 +162,16 @@ export async function finalizarImport(db, opciones = {}) {
         'No se borra nada para evitar un vaciado accidental por una sincronizacion incompleta.',
     );
   } else {
+    // Paridad con ExcelPeticionImporter.cs (esBorradorLimpio): solo se
+    // considera para borrado (y para el denominador del umbral) una peticion
+    // Borrador, NO marcada y NO manual. Enviada/SinCorreoComuna/Error o
+    // cualquier fila marcada nunca se tocan, aunque desaparezcan del Excel:
+    // perderian su tracking de plazo legal o una accion pendiente del usuario.
     const { results: existentes } = await db
-      .prepare("SELECT id, rut_norm, comuna_norm FROM peticiones WHERE oficina IS NULL OR oficina != 'MANUAL'")
+      .prepare(
+        "SELECT id, rut_norm, comuna_norm FROM peticiones " +
+          "WHERE (oficina IS NULL OR oficina != 'MANUAL') AND estado = 'Borrador' AND marcada = 0",
+      )
       .all();
 
     const candidatas = existentes.filter((p) => !clavesVigentes.has(`${p.rut_norm}|${p.comuna_norm}`));

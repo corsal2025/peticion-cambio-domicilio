@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { crearD1Fake } from './support/d1Fake.js';
 import { importarFilas, finalizarImport } from '../worker/lib/importar.js';
-import { upsertPeticion, listarPeticiones } from '../worker/lib/peticiones.js';
+import { upsertPeticion, listarPeticiones, marcarPeticion, marcarComoEnviada } from '../worker/lib/peticiones.js';
 
 function fila(overrides = {}) {
   return {
@@ -123,6 +123,57 @@ test('finalizar omite la limpieza si borraria mas del 50% de las peticiones Borr
   assert.equal(lista.length, 4, 'la limpieza masiva se omite por superar el umbral de seguridad');
   assert.equal(r2.eliminadas, 0);
   assert.ok(Array.isArray(r2.avisos) && r2.avisos.length > 0);
+});
+
+test('finalizar NUNCA borra una peticion Enviada/Marcada ausente, aunque no este en Borrador y el umbral lo permita', async () => {
+  const db = crearD1Fake();
+  // 4 Borrador limpios (quedan vigentes en ambas sincronizaciones) + 1 que
+  // pasara a Enviada antes de la segunda sincronizacion.
+  await importarUnLote(db, [
+    fila({ rut: '18.785.387-7', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+    fila({ rut: '7.654.321-6', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+    fila({ rut: '9.876.543-3', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+    fila({ rut: '11.111.111-1', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+    fila({ rut: '22.222.222-2', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+  ]);
+  const lista1 = await listarPeticiones(db, {});
+  const pEnviada = lista1.find((p) => p.rut === '22.222.222-2');
+  await marcarComoEnviada(db, pEnviada.id, new Date().toISOString(), 'valpo@muni.cl');
+
+  // Segunda sincronizacion: SOLO desaparece la que ya esta Enviada (el resto
+  // sigue vigente). Con el umbral calculado sobre TODAS las no-manuales
+  // (bug), 1 de 5 = 20% queda bajo el umbral y se borraria igual.
+  const r2 = await importarUnLote(db, [
+    fila({ rut: '18.785.387-7', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+    fila({ rut: '7.654.321-6', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+    fila({ rut: '9.876.543-3', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+    fila({ rut: '11.111.111-1', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+  ]);
+
+  const lista2 = await listarPeticiones(db, {});
+  assert.equal(lista2.length, 5, 'la peticion Enviada nunca se borra, sin importar el umbral');
+  assert.equal(r2.eliminadas, 0);
+});
+
+test('el umbral del 50% se calcula solo sobre Borrador limpio, no sobre Enviada/Marcada/error', async () => {
+  const db = crearD1Fake();
+  await importarUnLote(db, [
+    fila({ rut: '18.785.387-7', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+    fila({ rut: '7.654.321-6', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+    fila({ rut: '9.876.543-3', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+  ]);
+  const [p1, p2, p3] = await listarPeticiones(db, {});
+  // p1 pasa a Enviada (no cuenta para el umbral ni se borra); quedan p2 y p3
+  // como Borrador limpio candidatas: si ambas desaparecen es 100% de 2, no
+  // 66% de 3 — pero igual supera el umbral, asi que se omite el borrado.
+  await marcarComoEnviada(db, p1.id, new Date().toISOString(), 'valpo@muni.cl');
+
+  const r2 = await importarUnLote(db, []);
+
+  const lista = await listarPeticiones(db, {});
+  assert.equal(lista.length, 3, 'se omite: 100% de las Borrador limpias desaparecerian');
+  assert.equal(r2.eliminadas, 0);
+  assert.ok(r2.avisos.length > 0);
 });
 
 test('import por lotes: la limpieza de obsoletas usa el acumulado de TODOS los lotes, no de uno solo', async () => {
