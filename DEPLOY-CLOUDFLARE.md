@@ -110,6 +110,23 @@ Una vez adentro, crear usuarios reales desde `/configuracion.html` (usa
 5. Recargar la planilla: debería aparecer el menú "Cambio de domicilio >
    Sincronizar ahora" para forzar una sincronización manual.
 
+**Contrato de import por lotes (relevante si se toca el worker o el script):**
+el libro real tiene ~4400 filas relevantes, así que Apps Script siempre reparte
+el envío en varios `POST /api/import` de hasta `MAX_FILAS_POR_LOTE` (500) filas
+cada uno, todos con el mismo `syncId` (UUID generado por sincronización) más
+`lote`/`totalLotes`. Cada `POST /api/import` **solo hace upsert, nunca borra**.
+Recién al final, después de mandar todos los lotes, Apps Script llama una vez
+a `POST /api/import/finalizar {syncId, hojasLeidas}`, que exige que hayan
+llegado todos los lotes anunciados y ahí sí ejecuta la limpieza de obsoletas
+sobre el acumulado completo de claves (rut|comuna) vistas en esa
+sincronización — nunca sobre un lote aislado. `finalizar` además mantiene las
+mismas guardas de seguridad: si no llegó ninguna clave, si se informó
+`hojasLeidas: 0`, o si la limpieza borraría más del 50% de las peticiones
+Borrador no-manuales existentes, se omite el borrado y se devuelve un aviso en
+vez de tocar la base. El tracking intermedio vive en las tablas D1
+`import_vistos`/`import_lotes` (ver `migrations/0001_init.sql`) y se limpia
+solo al finalizar cada `syncId`.
+
 ## 7. Arrancar el `.exe --relay` en una PC municipal
 
 En la PC que tiene la red/VPN que ve `mail.munivalpo.cl` (la misma que ya usa

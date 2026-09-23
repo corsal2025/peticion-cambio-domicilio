@@ -118,14 +118,31 @@ function sincronizar_() {
   }
 
   var lotes = partirEnLotes_(extraido.filas, CONFIG.MAX_FILAS_POR_LOTE);
-  var recibidas = 0, insertadas = 0, actualizadas = 0, eliminadas = 0;
+  var syncId = Utilities.getUuid();
+  var recibidas = 0, insertadas = 0, actualizadas = 0;
 
+  // Cada lote SOLO hace upsert (el worker nunca borra dentro de /api/import).
+  // El libro real tiene miles de filas relevantes, asi que casi siempre hay
+  // mas de un lote; la limpieza de obsoletas se decide una unica vez al
+  // final, con el acumulado de TODOS los lotes de este syncId.
   for (var i = 0; i < lotes.length; i++) {
-    var respuesta = enviarLote_(workerUrl, importSecret, lotes[i], extraido.hojasLeidas);
+    var respuesta = enviarLote_(workerUrl, importSecret, {
+      syncId: syncId,
+      lote: i + 1,
+      totalLotes: lotes.length,
+      hojasLeidas: extraido.hojasLeidas,
+      filas: lotes[i],
+    });
     recibidas += respuesta.recibidas || 0;
     insertadas += respuesta.insertadas || 0;
     actualizadas += respuesta.actualizadas || 0;
-    eliminadas += respuesta.eliminadas || 0;
+  }
+
+  var final = finalizarImport_(workerUrl, importSecret, syncId, extraido.hojasLeidas);
+  if (final.error) {
+    extraido.avisos.push('Finalizar import fallo: ' + final.error);
+  } else if (final.avisos && final.avisos.length) {
+    extraido.avisos = extraido.avisos.concat(final.avisos);
   }
 
   return {
@@ -135,7 +152,7 @@ function sincronizar_() {
     recibidas: recibidas,
     insertadas: insertadas,
     actualizadas: actualizadas,
-    eliminadas: eliminadas,
+    eliminadas: final.eliminadas || 0,
   };
 }
 
@@ -147,13 +164,13 @@ function partirEnLotes_(filas, tamano) {
   return lotes.length ? lotes : [[]];
 }
 
-function enviarLote_(workerUrl, importSecret, filas, hojasLeidas) {
+function enviarLote_(workerUrl, importSecret, payload) {
   var url = workerUrl.replace(/\/+$/, '') + '/api/import';
   var respuesta = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
     headers: { 'X-Import-Secret': importSecret },
-    payload: JSON.stringify({ filas: filas, hojasLeidas: hojasLeidas }),
+    payload: JSON.stringify(payload),
     muteHttpExceptions: true,
   });
 
@@ -164,6 +181,36 @@ function enviarLote_(workerUrl, importSecret, filas, hojasLeidas) {
   }
 
   return JSON.parse(cuerpo);
+}
+
+/**
+ * Cierra la sincronizacion syncId: recien aca el worker decide si limpia
+ * obsoletas, usando el acumulado de todos los lotes enviados. Se llama SIEMPRE
+ * despues de mandar todos los lotes (incluso si hubo 1 solo lote).
+ */
+function finalizarImport_(workerUrl, importSecret, syncId, hojasLeidas) {
+  var url = workerUrl.replace(/\/+$/, '') + '/api/import/finalizar';
+  var respuesta = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'X-Import-Secret': importSecret },
+    payload: JSON.stringify({ syncId: syncId, hojasLeidas: hojasLeidas }),
+    muteHttpExceptions: true,
+  });
+
+  var codigo = respuesta.getResponseCode();
+  var cuerpo = respuesta.getContentText();
+  var parsed;
+  try {
+    parsed = JSON.parse(cuerpo);
+  } catch (e) {
+    parsed = {};
+  }
+  if (codigo < 200 || codigo >= 300) {
+    return { error: (parsed && parsed.error) || ('codigo ' + codigo + ': ' + cuerpo), eliminadas: 0, avisos: [] };
+  }
+
+  return parsed;
 }
 
 /**

@@ -94,3 +94,25 @@ CREATE TABLE IF NOT EXISTS feriados (
   fecha  TEXT PRIMARY KEY,
   nombre TEXT
 );
+
+-- Claves (rut_norm|comuna_norm) vistas por cada lote de un import por batches
+-- (Apps Script parte el libro en lotes de 500 filas via POST /api/import). La
+-- limpieza de obsoletas NO corre por lote: se acumulan aca hasta que llega
+-- POST /api/import/finalizar con el mismo syncId, que recien ahi calcula el
+-- set completo de claves vigentes y ejecuta el borrado (una sola vez). Se
+-- limpian las filas de un syncId al finalizar (ok o rechazado).
+CREATE TABLE IF NOT EXISTS import_vistos (
+  sync_id TEXT NOT NULL,
+  clave   TEXT NOT NULL,
+  PRIMARY KEY (sync_id, clave)
+);
+
+-- Progreso de lotes recibidos por syncId, para que /api/import/finalizar
+-- pueda rechazar si aun faltan lotes por llegar.
+CREATE TABLE IF NOT EXISTS import_lotes (
+  sync_id      TEXT PRIMARY KEY,
+  total_lotes  INTEGER,
+  lotes_vistos INTEGER NOT NULL DEFAULT 0,
+  hojas_leidas INTEGER,
+  actualizado_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
