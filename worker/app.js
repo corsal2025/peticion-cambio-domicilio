@@ -7,6 +7,7 @@ import { guard, soloAdmin, authRoutes } from './routes/auth.js';
 import { peticionesRoutes } from './routes/peticiones.js';
 import { comunasRoutes } from './routes/comunas.js';
 import { importarRoutes } from './routes/importar.js';
+import { comunasSyncRoutes } from './routes/comunasSync.js';
 import { relayRoutes } from './routes/relay.js';
 import { configRoutes } from './routes/config.js';
 import { estadisticasRoutes } from './routes/estadisticas.js';
@@ -20,6 +21,7 @@ const api = new Hono();
 // Autenticadas por secreto compartido, NUNCA por cookie de sesion: Apps Script
 // y el proceso --relay no tienen navegador.
 api.route('/', importarRoutes);
+api.route('/', comunasSyncRoutes);
 api.route('/', relayRoutes);
 
 // Publicas (login/logout/me).

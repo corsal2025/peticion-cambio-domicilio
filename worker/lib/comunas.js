@@ -69,6 +69,63 @@ export async function importarCsv(db, csvTexto) {
   return { insertadas, actualizadas };
 }
 
+/**
+ * Sincroniza contactos municipales (comuna, correo) recibidos desde Apps
+ * Script (hoja "CORREOS CAMBIO DE DOMICLIO" del libro, ver
+ * apps-script/Code.gs y src/PeticionCambioDomicilio/Comunas/ComunaDirectory.cs
+ * ImportFromWorkbook, del que este es el port). Paridad de semantica con
+ * ComunaDirectory.AddOrUpdate: upsert por (comuna normalizada, correo
+ * exacto, case-insensitive) — si el par ya existe se cuenta como
+ * "actualizado" sin tocar nada; si no existe se agrega (creando la comuna si
+ * hace falta, o sumando el correo a la lista separada por comas de una
+ * comuna ya existente). NUNCA borra: si un correo desaparece de la hoja en
+ * una sincronizacion futura, sigue quedando en D1 hasta que un admin lo
+ * elimine a mano desde /comunas.html.
+ */
+export async function sincronizarContactos(db, contactos) {
+  let leidos = 0;
+  let nuevos = 0;
+  let actualizados = 0;
+
+  for (const contacto of contactos || []) {
+    const comuna = String(contacto?.comuna ?? '').trim();
+    const email = String(contacto?.email ?? '').trim();
+    if (!comuna || !email || !email.includes('@')) continue;
+    leidos++;
+
+    const norm = fold(comuna);
+    const existente = await db.prepare('SELECT id, correos FROM comunas WHERE nombre_norm = ?').bind(norm).first();
+
+    if (!existente) {
+      await db
+        .prepare('INSERT INTO comunas (nombre, nombre_norm, correos) VALUES (?, ?, ?)')
+        .bind(comuna.toUpperCase(), norm, email)
+        .run();
+      nuevos++;
+      continue;
+    }
+
+    const emailsActuales = (existente.correos || '')
+      .split(',')
+      .map((e) => e.trim())
+      .filter(Boolean);
+    const yaExiste = emailsActuales.some((e) => e.toLowerCase() === email.toLowerCase());
+    if (yaExiste) {
+      actualizados++;
+      continue;
+    }
+
+    const correosNuevos = [...emailsActuales, email].join(',');
+    await db
+      .prepare("UPDATE comunas SET correos = ?, actualizado_en = datetime('now') WHERE id = ?")
+      .bind(correosNuevos, existente.id)
+      .run();
+    nuevos++;
+  }
+
+  return { leidos, nuevos, actualizados };
+}
+
 function parseCsv(texto) {
   const lineas = texto.split(/\r?\n/).filter((l) => l.trim() !== '');
   if (lineas.length === 0) return [];

@@ -75,6 +75,7 @@ function sincronizarAhora() {
       'Sincronizacion completa',
       'Hojas leidas: ' + resultado.hojasLeidas + '\n' +
         'Filas enviadas: ' + resultado.filas.length + '\n' +
+        'Correos de comunas nuevos/actualizados: ' + resultado.comunasNuevos + '/' + resultado.comunasActualizados + '\n' +
         'Avisos: ' + resultado.avisos.length,
       ui.ButtonSet.OK,
     );
@@ -99,6 +100,13 @@ function sincronizar_() {
   var libro = spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : SpreadsheetApp.getActive();
   var extraido = extraerFilas_(libro);
 
+  // Sincroniza el directorio de correos de comunas (hoja "CORREOS CAMBIO DE
+  // DOMICLIO") en la MISMA corrida. A diferencia del sync de peticiones, este
+  // nunca borra (POST /api/comunas/sync solo hace upsert), asi que se corre
+  // siempre, incluso si el chequeo de "0 hojas leidas" de abajo aborta el
+  // envio de peticiones.
+  var comunasResumen = sincronizarContactosComunas_(workerUrl, importSecret, libro, extraido.avisos);
+
   // Red de seguridad: si no se leyo ninguna hoja (libro vacio, permisos,
   // cambio de estructura, etc.) no se manda NADA al worker. Un POST con 0
   // hojas leidas no es evidencia de que las peticiones desaparecieron del
@@ -114,6 +122,8 @@ function sincronizar_() {
       insertadas: 0,
       actualizadas: 0,
       eliminadas: 0,
+      comunasNuevos: comunasResumen.nuevos,
+      comunasActualizados: comunasResumen.actualizados,
     };
   }
 
@@ -153,7 +163,83 @@ function sincronizar_() {
     insertadas: insertadas,
     actualizadas: actualizadas,
     eliminadas: final.eliminadas || 0,
+    comunasNuevos: comunasResumen.nuevos,
+    comunasActualizados: comunasResumen.actualizados,
   };
+}
+
+/**
+ * Sincroniza el directorio de correos de comunas: busca la hoja cuyo nombre
+ * contiene "correos cambio de dom" (columnas Municipio / Correo; el
+ * municipio a veces viene con prefijo "MUNICIP/") y hace POST a
+ * /api/comunas/sync, autenticado con el mismo IMPORT_SECRET que /api/import.
+ * Es un port 1:1 de la lectura de
+ * PeticionCambioDomicilio.Comunas.ComunaDirectory.ImportFromWorkbook. Nunca
+ * lanza: cualquier error queda como aviso en `avisos` para no frenar el sync
+ * de peticiones.
+ */
+function sincronizarContactosComunas_(workerUrl, importSecret, libro, avisos) {
+  try {
+    var hoja = null;
+    var hojas = libro.getSheets();
+    for (var h = 0; h < hojas.length; h++) {
+      if (fold_(hojas[h].getName()).indexOf('correos cambio de dom') !== -1) {
+        hoja = hojas[h];
+        break;
+      }
+    }
+    if (!hoja) {
+      avisos.push('No se encontro la hoja de correos de comunas ("CORREOS CAMBIO DE DOMICLIO"); no se sincronizaron contactos.');
+      return { nuevos: 0, actualizados: 0 };
+    }
+
+    var datos = hoja.getDataRange().getValues();
+    var contactos = [];
+    for (var r = 0; r < datos.length; r++) {
+      var muni = String(datos[r][0] == null ? '' : datos[r][0]).trim();
+      var mail = String(datos[r][1] == null ? '' : datos[r][1]).trim();
+      if (!muni || !mail) continue;
+      if (fold_(muni) === 'municipio' || mail.indexOf('@') === -1) continue;
+      contactos.push({ comuna: stripMuniPrefix_(muni), email: mail });
+    }
+
+    if (contactos.length === 0) {
+      avisos.push('La hoja de correos de comunas no tiene contactos validos; no se envio nada a /api/comunas/sync.');
+      return { nuevos: 0, actualizados: 0 };
+    }
+
+    var url = workerUrl.replace(/\/+$/, '') + '/api/comunas/sync';
+    var respuesta = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'X-Import-Secret': importSecret },
+      payload: JSON.stringify({ contactos: contactos }),
+      muteHttpExceptions: true,
+    });
+
+    var codigo = respuesta.getResponseCode();
+    var cuerpo = respuesta.getContentText();
+    if (codigo < 200 || codigo >= 300) {
+      avisos.push('POST /api/comunas/sync fallo (' + codigo + '): ' + cuerpo);
+      return { nuevos: 0, actualizados: 0 };
+    }
+
+    var parsed = JSON.parse(cuerpo);
+    return { nuevos: parsed.nuevos || 0, actualizados: parsed.actualizados || 0 };
+  } catch (e) {
+    avisos.push('Sincronizacion de correos de comunas fallo: ' + e.message);
+    return { nuevos: 0, actualizados: 0 };
+  }
+}
+
+/** Quita el prefijo "MUNICIP/" (o similar) de un nombre de municipio: todo antes del primer "/" si aparece dentro de los primeros 12 caracteres. */
+function stripMuniPrefix_(raw) {
+  var value = String(raw).trim();
+  var slash = value.indexOf('/');
+  if (slash >= 0 && slash < 12) {
+    value = value.substring(slash + 1);
+  }
+  return value.trim().toUpperCase();
 }
 
 function partirEnLotes_(filas, tamano) {

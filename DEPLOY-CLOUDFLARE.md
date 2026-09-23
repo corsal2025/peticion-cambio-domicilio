@@ -168,7 +168,8 @@ Una vez adentro, crear usuarios reales desde `/configuracion.html` (usa
 3. `Configuración del proyecto > Propiedades del script`, agregar:
    - `WORKER_URL` → la URL del proyecto Pages (ej.
      `https://peticion-cambio-domicilio.pages.dev`)
-   - `IMPORT_SECRET` → el mismo valor puesto en el secret del Worker
+   - `IMPORT_SECRET` → el mismo valor puesto en el secret del Worker (se usa
+     tanto para `/api/import` como para `/api/comunas/sync`)
    - `SPREADSHEET_ID` → opcional, solo si el script no está bound a la
      planilla (`clasp create --type standalone`)
 4. Correr `installTrigger` una vez a mano desde el editor de Apps Script
@@ -193,6 +194,34 @@ Borrador no-manuales existentes, se omite el borrado y se devuelve un aviso en
 vez de tocar la base. El tracking intermedio vive en las tablas D1
 `import_vistos`/`import_lotes` (ver `migrations/0001_init.sql`) y se limpia
 solo al finalizar cada `syncId`.
+
+**Sincronización de correos de comunas:** en la misma corrida de
+`sincronizarAhora`/`installTrigger`, Apps Script también lee la hoja cuyo
+nombre contiene "correos cambio de dom" (la hoja "CORREOS CAMBIO DE
+DOMICLIO" del libro real, con columnas Municipio/Correo — mismo formato que
+lee `ComunaDirectory.ImportFromWorkbook` en el `.exe` legado) y hace `POST
+/api/comunas/sync {contactos: [{comuna, email}, ...]}`, autenticado con el
+mismo `IMPORT_SECRET`. El worker hace upsert por (comuna, correo) — agrega
+comunas/correos nuevos y cuenta los que ya existían, pero **nunca borra** un
+contacto que haya desaparecido de la hoja (a diferencia de
+`/api/import/finalizar`, que sí limpia peticiones obsoletas). Si un contacto
+se da de baja hay que borrarlo a mano desde `/comunas.html`. Cada
+sincronización deja un renglón en `sync_log` con `fuente =
+'apps-script-comunas'`.
+
+> **Troubleshooting:** si la tabla `sync_log` está vacía (ni `fuente =
+> 'apps-script'` ni `'apps-script-comunas'`), Apps Script nunca llegó a
+> alcanzar al worker. Revisar, en ese orden: (1) `WORKER_URL` apunta a la URL
+> real del proyecto Pages (sin `/` final ni typos); (2) `IMPORT_SECRET` en
+> las Script Properties es exactamente el mismo valor que el secret
+> `IMPORT_SECRET` del Worker (`npx wrangler pages secret put IMPORT_SECRET
+> ...`); (3) `SPREADSHEET_ID` (si se usó un script standalone) apunta al
+> libro correcto. Después de corregir, correr `sincronizarAhora` desde el
+> menú "Cambio de domicilio" de la planilla — el `ui.alert` final muestra
+> hojas leídas, filas de peticiones enviadas, contactos de comunas
+> nuevos/actualizados y la cantidad de avisos; y cualquier error de red
+> queda además en los "Registros de ejecución" del editor de Apps Script
+> (`Ver > Registros` o `Ejecución > Registros de ejecución`).
 
 ## 7. Arrancar el `.exe --relay` en una PC municipal
 
