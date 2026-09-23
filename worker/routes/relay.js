@@ -11,9 +11,12 @@ function autenticado(c) {
 
 export const relayRoutes = new Hono();
 
+const LIMITE_MAX_PENDIENTES = 50;
+
 relayRoutes.get('/relay/pendientes', async (c) => {
   if (!autenticado(c)) return c.json({ error: 'Secreto de relay invalido' }, 401);
-  const limite = Number(c.req.query('limit')) || 10;
+  const limiteSolicitado = Number(c.req.query('limit')) || 10;
+  const limite = Math.min(Math.max(limiteSolicitado, 1), LIMITE_MAX_PENDIENTES);
   const pendientes = await obtenerPendientes(c.env.DB, limite);
   return c.json(pendientes);
 });

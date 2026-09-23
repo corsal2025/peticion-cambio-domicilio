@@ -23,6 +23,21 @@ test('GET /api/relay/pendientes sin secreto responde 401', async () => {
   assert.equal(res.status, 401);
 });
 
+test('GET /api/relay/pendientes con limit por encima de 50 se acota a 50', async () => {
+  const db = crearD1Fake();
+  for (let i = 0; i < 60; i++) {
+    const rut = String(10000000 + i);
+    await importarFilas(db, [{ nombreCompleto: `Persona ${i}`, rut: `${rut}-${i % 10}`, comuna: `Comuna${i}` }]);
+  }
+  const { results } = await db.prepare("SELECT id FROM peticiones").all();
+  for (const p of results) await marcarPeticion(db, p.id, true);
+  await encolarEnvios(db, results.map((p) => ({ para: 'valpo@muni.cl', asunto: 'S', cuerpo: 'C', peticionIds: [p.id] })));
+
+  const res = await app.request('/api/relay/pendientes?limit=9999', { headers: { 'X-Relay-Secret': 'secreto-relay' } }, env(db));
+  const pendientes = await res.json();
+  assert.ok(pendientes.length <= 50, `esperaba <=50, llegaron ${pendientes.length}`);
+});
+
 test('GET /api/relay/pendientes con secreto valido retorna y marca tomado', async () => {
   const db = crearD1Fake();
   await conEnvioPendiente(db);
