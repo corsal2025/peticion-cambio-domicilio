@@ -6,9 +6,11 @@
 //   - direct: el propio Worker llama a EWS (worker/lib/ews.js).
 import { agruparPorComuna, construirCorreo } from './plantilla.js';
 import { enviarEws } from './ews.js';
-import { marcarComoEnviada } from './peticiones.js';
+import { marcarComoEnviadas } from './peticiones.js';
 import { registrarPeticionesEnvio, peticionesDelEnvio } from './envioPeticiones.js';
 import { fold } from './normalizar.js';
+import { chunkPorTamano } from './jsonChunk.js';
+import { batch } from './db.js';
 
 /**
  * Arma los correos a enviar (uno por comuna) a partir de las peticiones
@@ -52,12 +54,20 @@ export async function encolarEnvios(db, envios) {
       .prepare('INSERT INTO envios (peticion_id, para, asunto, cuerpo_html) VALUES (?, ?, ?, ?)')
       .bind(envio.peticionIds[0], envio.para, envio.asunto, envio.cuerpo)
       .run();
-
-    for (const id of envio.peticionIds) {
-      await db.prepare("UPDATE peticiones SET estado = 'EnCola', marcada = 0 WHERE id = ?").bind(id).run();
-    }
-
     envio.envioId = result.meta.last_row_id;
+
+    // Set-based: un envio de una comuna grande puede agrupar cientos de
+    // peticionIds; se pasan al UPDATE como UN parametro JSON via json_each(),
+    // nunca un UPDATE por id.
+    await batch(
+      db,
+      chunkPorTamano(envio.peticionIds).map((chunk) =>
+        db
+          .prepare("UPDATE peticiones SET estado = 'EnCola', marcada = 0 WHERE id IN (SELECT value FROM json_each(?))")
+          .bind(JSON.stringify(chunk)),
+      ),
+    );
+
     await registrarPeticionesEnvio(db, envio.envioId, envio.peticionIds);
   }
   return envios;
@@ -73,9 +83,7 @@ export async function enviarDirecto(db, envio, ewsOpciones, deps = {}) {
       .prepare("UPDATE envios SET estado = 'enviado', resultado = 'ok', enviado_en = ? WHERE id = ?")
       .bind(ahora, envio.id)
       .run();
-    for (const id of ids) {
-      await marcarComoEnviada(db, id, ahora, envio.para);
-    }
+    await marcarComoEnviadas(db, ids, ahora, envio.para);
     return { ok: true };
   } catch (err) {
     await db

@@ -3,10 +3,21 @@
 // en el momento de reportar el resultado. Sin esta tabla, dos envios
 // encolados para la misma comuna hacian que el primero en reportar 'ok'
 // marcara TAMBIEN las peticiones del segundo (EnviadaEn/plazo incorrectos).
+import { chunkPorTamano } from './jsonChunk.js';
+import { batch } from './db.js';
+
+// Set-based: un envio de una comuna grande puede traer cientos de
+// peticionIds; nunca se hace un INSERT por id (subrequests D1 limitados).
 export async function registrarPeticionesEnvio(db, envioId, peticionIds) {
-  for (const id of peticionIds) {
-    await db.prepare('INSERT OR IGNORE INTO envio_peticiones (envio_id, peticion_id) VALUES (?, ?)').bind(envioId, id).run();
-  }
+  if (!peticionIds || peticionIds.length === 0) return;
+  await batch(
+    db,
+    chunkPorTamano(peticionIds).map((chunk) =>
+      db
+        .prepare('INSERT OR IGNORE INTO envio_peticiones (envio_id, peticion_id) SELECT ?, value FROM json_each(?)')
+        .bind(envioId, JSON.stringify(chunk)),
+    ),
+  );
 }
 
 /**

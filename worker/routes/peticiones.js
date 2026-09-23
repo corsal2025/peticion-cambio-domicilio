@@ -2,7 +2,7 @@
 // Todas estas rutas viven detras del guard de sesion (worker/routes/auth.js).
 import { Hono } from 'hono';
 import { normalizeAndValidate } from '../lib/rut.js';
-import { upsertPeticion, listarPeticiones, marcarPeticion, marcarTodas } from '../lib/peticiones.js';
+import { upsertPeticion, listarPeticiones, marcarPeticion, marcarTodas, marcarSinCorreoComuna } from '../lib/peticiones.js';
 import { obtenerConfig, resolverSendAs } from '../lib/config.js';
 import { listarComunas } from '../lib/comunas.js';
 import { prepararEnvios, encolarEnvios, enviarDirecto } from '../lib/mail.js';
@@ -91,11 +91,10 @@ peticionesRoutes.post('/peticiones/enviar', async (c) => {
 
   const sinCorreo = envios.filter((e) => !e.para);
   const conCorreo = envios.filter((e) => e.para);
-  for (const e of sinCorreo) {
-    for (const id of e.peticionIds) {
-      await db.prepare("UPDATE peticiones SET estado = 'SinCorreoComuna' WHERE id = ?").bind(id).run();
-    }
-  }
+  // Set-based: puede haber varias comunas sin correo, cada una con cientos de
+  // peticiones marcadas; se juntan TODOS los ids en un solo UPDATE via
+  // json_each(), nunca un UPDATE por peticion.
+  await marcarSinCorreoComuna(db, sinCorreo.flatMap((e) => e.peticionIds));
 
   await encolarEnvios(db, conCorreo);
 

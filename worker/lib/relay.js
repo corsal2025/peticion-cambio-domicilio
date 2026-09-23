@@ -17,7 +17,7 @@
 // el envio siga en 'tomado'/'revision' -> un reporte tardio o duplicado (envio
 // ya 'enviado' o reencolado con otro lease) es un no-op idempotente, nunca un
 // doble envio al municipio.
-import { marcarComoEnviada } from './peticiones.js';
+import { marcarComoEnviadas } from './peticiones.js';
 import { peticionesDelEnvio } from './envioPeticiones.js';
 
 const TOMADO_TIMEOUT_MS = 10 * 60 * 1000;
@@ -95,9 +95,7 @@ export async function reportarResultado(db, envioId, ok, detalle, leaseToken) {
       .run();
     if (meta.changes === 0) return { ok: false, motivo: 'lease_invalido' };
     const ids = await peticionesDelEnvio(db, envio);
-    for (const id of ids) {
-      await marcarComoEnviada(db, id, ahora, envio.para);
-    }
+    await marcarComoEnviadas(db, ids, ahora, envio.para);
     return { ok: true };
   }
 
@@ -149,8 +147,6 @@ export async function confirmarEnviadoManual(db, envioId) {
   if (meta.changes === 0) return { ok: false };
 
   const ids = await peticionesDelEnvio(db, envio);
-  for (const id of ids) {
-    await marcarComoEnviada(db, id, ahora, envio.para);
-  }
+  await marcarComoEnviadas(db, ids, ahora, envio.para);
   return { ok: true };
 }

@@ -6,6 +6,8 @@
 // avanza (nunca retrocede), segun el rango de worker/lib/estadoCarpeta.js.
 import { fold, coincide } from './normalizar.js';
 import { normalizar as normalizarEstado, rango } from './estadoCarpeta.js';
+import { chunkPorTamano } from './jsonChunk.js';
+import { batch } from './db.js';
 
 function rutNorm(rut) {
   return String(rut ?? '')
@@ -97,10 +99,19 @@ export async function marcarPeticion(db, id, marcada) {
   await db.prepare('UPDATE peticiones SET marcada = ? WHERE id = ?').bind(marcada ? 1 : 0, id).run();
 }
 
+/** Marca/desmarca varias peticiones de una: un UPDATE set-based (por chunk de
+ * tamano), nunca un UPDATE por id — ids puede traer cientos de filas
+ * (accion "marcar todas" de la UI). */
 export async function marcarTodas(db, ids, marcada) {
-  for (const id of ids) {
-    await marcarPeticion(db, id, marcada);
-  }
+  if (!ids || ids.length === 0) return;
+  await batch(
+    db,
+    chunkPorTamano(ids).map((chunk) =>
+      db
+        .prepare('UPDATE peticiones SET marcada = ? WHERE id IN (SELECT value FROM json_each(?))')
+        .bind(marcada ? 1 : 0, JSON.stringify(chunk)),
+    ),
+  );
 }
 
 /** Limpia la marca y setea enviada_en tras un envio exitoso. */
@@ -111,4 +122,38 @@ export async function marcarComoEnviada(db, id, enviadaEn, destinatarios) {
     )
     .bind(enviadaEn, destinatarios ?? null, id)
     .run();
+}
+
+/** Version set-based de marcarComoEnviada: marca VARIAS peticiones (ids de un
+ * mismo envio) como enviadas con un puñado de statements, no uno por id. Usada
+ * por relay.js/mail.js al resolver un envio que agrupa muchas peticiones de
+ * una misma comuna. */
+export async function marcarComoEnviadas(db, ids, enviadaEn, destinatarios) {
+  if (!ids || ids.length === 0) return;
+  await batch(
+    db,
+    chunkPorTamano(ids).map((chunk) =>
+      db
+        .prepare(
+          `UPDATE peticiones SET marcada = 0, estado = 'Enviada', enviada_en = ?, destinatarios_correo = ?
+           WHERE id IN (SELECT value FROM json_each(?))`,
+        )
+        .bind(enviadaEn, destinatarios ?? null, JSON.stringify(chunk)),
+    ),
+  );
+}
+
+/** Version set-based del `UPDATE ... SET estado = 'SinCorreoComuna'` para
+ * varias peticiones (una comuna sin correo puede tener cientos de filas
+ * marcadas para envio). */
+export async function marcarSinCorreoComuna(db, ids) {
+  if (!ids || ids.length === 0) return;
+  await batch(
+    db,
+    chunkPorTamano(ids).map((chunk) =>
+      db
+        .prepare("UPDATE peticiones SET estado = 'SinCorreoComuna' WHERE id IN (SELECT value FROM json_each(?))")
+        .bind(JSON.stringify(chunk)),
+    ),
+  );
 }
