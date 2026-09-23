@@ -138,10 +138,77 @@ function sincronizarAhora() {
 /**
  * Entry point del trigger de tiempo (ver installTrigger). NO fuerza: si el
  * .xlsx no cambio desde la ultima sincronizacion exitosa, se omite para
- * ahorrar cuota de Drive/UrlFetch.
+ * ahorrar cuota de Drive/UrlFetch. Usa el mismo LockService que doPost para
+ * que una corrida disparada a mano desde el dashboard ("Sincronizar ahora")
+ * nunca se superponga con el trigger de 15 minutos.
  */
 function sincronizarProgramada() {
-  return sincronizar_(false);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) {
+    Logger.log('sincronizarProgramada: ya hay una sincronizacion en curso, se omite esta corrida.');
+    return { omitido: true, avisos: ['Ya habia una sincronizacion en curso.'] };
+  }
+  try {
+    return sincronizar_(false);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Web app (deploy > Implementar > Aplicacion web). Entry point HTTP que usa
+ * el worker (POST /api/sincronizar, boton "Sincronizar ahora" del dashboard)
+ * para forzar una sincronizacion bajo demanda sin esperar el trigger de 15
+ * minutos. Autenticado por el mismo IMPORT_SECRET que ya usan /api/import y
+ * /api/comunas/sync (Script Properties), NO por sesion/OAuth de usuario.
+ * Usa el mismo LockService que sincronizarProgramada para no correr en
+ * paralelo con el trigger de tiempo.
+ */
+function doPost(e) {
+  var props = PropertiesService.getScriptProperties();
+  var secretoEsperado = props.getProperty('IMPORT_SECRET');
+
+  var body;
+  try {
+    body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  } catch (err) {
+    return jsonOutput_({ ok: false, error: 'JSON invalido' });
+  }
+
+  var secretoRecibido = String((body && body.secret) || '');
+  if (!secretoEsperado || !secretosIguales_(secretoRecibido, secretoEsperado)) {
+    return jsonOutput_({ ok: false, error: 'no autorizado' });
+  }
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) {
+    return jsonOutput_({ ok: false, error: 'ya hay una sincronizacion en curso' });
+  }
+
+  try {
+    var resultado = sincronizar_(true);
+    return jsonOutput_({ ok: true, resumen: resultado });
+  } catch (err) {
+    return jsonOutput_({ ok: false, error: err.message });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function jsonOutput_(objeto) {
+  return ContentService.createTextOutput(JSON.stringify(objeto)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/** Comparacion de secretos "tiempo casi constante": recorre el largo mayor sin cortar antes por longitud distinta. */
+function secretosIguales_(a, b) {
+  var largo = Math.max(a.length, b.length);
+  var dif = a.length === b.length ? 0 : 1;
+  for (var i = 0; i < largo; i++) {
+    var ca = i < a.length ? a.charCodeAt(i) : 0;
+    var cb = i < b.length ? b.charCodeAt(i) : 0;
+    dif |= ca ^ cb;
+  }
+  return dif === 0;
 }
 
 // --------------------------------------------------------------------------

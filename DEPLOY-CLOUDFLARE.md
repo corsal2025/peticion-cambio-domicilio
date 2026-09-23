@@ -62,7 +62,16 @@ npx wrangler pages secret put SESSION_SECRET --project-name=peticion-cambio-domi
 npx wrangler pages secret put MASTER_PIN --project-name=peticion-cambio-domicilio
 npx wrangler pages secret put IMPORT_SECRET --project-name=peticion-cambio-domicilio
 npx wrangler pages secret put RELAY_SECRET --project-name=peticion-cambio-domicilio
+npx wrangler pages secret put APPS_SCRIPT_URL --project-name=peticion-cambio-domicilio
 ```
+
+`APPS_SCRIPT_URL` es la URL del deployment "Aplicacion web" del proyecto
+Apps Script (`https://script.google.com/macros/s/AKfycb.../exec`, ver sección
+6 "Camino A" paso 8 más abajo). La usa el botón "Sincronizar ahora" del
+dashboard (`POST /api/sincronizar`) para forzar una sincronización sin
+esperar el trigger de 15 minutos; el worker reenvía el mismo `IMPORT_SECRET`
+en el body. Si falta esta secret, el botón responde 503 pero el resto del
+sitio funciona igual (el time trigger de Apps Script sigue corriendo solo).
 
 `SESSION_SECRET` es obligatorio: si falta, el worker responde 500 (fail
 closed) en `/api/auth/*` y en toda ruta protegida — nunca cae a un secreto
@@ -212,6 +221,15 @@ https://drive.google.com/file/d/ESTE_ES_EL_ID/view
    - `sincronizarAhora()` — fuerza una sincronización manual completa (no
      respeta el chequeo de "sin cambios"), útil para validar que todo quedó
      bien configurado antes de esperar al trigger.
+8. Publicar el web app (para que el botón "Sincronizar ahora" del dashboard
+   pueda llamarlo): `Implementar > Nueva implementación > tipo "Aplicación
+   web"`, con "Ejecutar como" = tu cuenta y "Quién tiene acceso" = "Cualquier
+   usuario" (ya viene precargado desde `appsscript.json`, sección `webapp`).
+   Copiar la URL `.../exec` que entrega Google y guardarla como el secret
+   `APPS_SCRIPT_URL` del Worker (paso 4 de este documento). Cada vez que se
+   suba código nuevo con `clasp push` hay que crear una nueva versión
+   (`Implementar > Gestionar implementaciones > editar > Nueva versión`) para
+   que el web app la tome; la URL `.../exec` no cambia entre versiones.
 
 ### Camino B: copiar y pegar a mano
 

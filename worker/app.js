@@ -13,6 +13,7 @@ import { configRoutes } from './routes/config.js';
 import { estadisticasRoutes } from './routes/estadisticas.js';
 import { usuariosRoutes } from './routes/usuarios.js';
 import { enviosRoutes } from './routes/envios.js';
+import { sincronizarRoutes } from './routes/sincronizar.js';
 
 export const app = new Hono();
 
@@ -33,6 +34,7 @@ api.use('*', guard);
 api.route('/', peticionesRoutes);
 api.route('/', comunasRoutes);
 api.route('/', estadisticasRoutes);
+api.route('/', sincronizarRoutes);
 
 // Solo admin.
 const admin = new Hono();
