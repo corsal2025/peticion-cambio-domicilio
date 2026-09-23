@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import { crearD1Fake } from './support/d1Fake.js';
 import { upsertPeticion, marcarPeticion } from '../worker/lib/peticiones.js';
 import { encolarEnvios } from '../worker/lib/mail.js';
-import { obtenerPendientes, reportarResultado } from '../worker/lib/relay.js';
+import {
+  obtenerPendientes,
+  reportarResultado,
+  reencolarRevision,
+  confirmarEnviadoManual,
+  listarEnRevision,
+} from '../worker/lib/relay.js';
 
 async function crearEnvioPendiente(db) {
   const { id } = await upsertPeticion(db, { nombreCompleto: 'Juan Perez', rut: '11.111.111-1', comuna: 'Concepcion' });
@@ -25,15 +31,87 @@ test('obtenerPendientes marca como tomado y no repite hasta liberarse', async ()
   assert.equal(segunda.length, 0);
 });
 
-test('obtenerPendientes re-libera tomados hace mas de 10 minutos', async () => {
+test('obtenerPendientes NO re-libera tomados vencidos a pendiente: los pasa a revision', async () => {
   const db = crearD1Fake();
   const { envio } = await crearEnvioPendiente(db);
   const hace11min = new Date(Date.now() - 11 * 60 * 1000).toISOString();
-  await db.prepare("UPDATE envios SET estado = 'tomado', tomado_en = ? WHERE id = ?").bind(hace11min, envio.id).run();
+  await db.prepare("UPDATE envios SET estado = 'tomado', tomado_en = ?, lease_token = 'lt-1' WHERE id = ?").bind(hace11min, envio.id).run();
 
   const pendientes = await obtenerPendientes(db, 10);
-  assert.equal(pendientes.length, 1);
-  assert.equal(pendientes[0].id, envio.id);
+  assert.equal(pendientes.length, 0);
+
+  const fila = await db.prepare('SELECT * FROM envios WHERE id = ?').bind(envio.id).first();
+  assert.equal(fila.estado, 'revision');
+  assert.equal(fila.lease_token, 'lt-1');
+});
+
+test('reportarResultado con lease_token valido resuelve un envio en revision (reporte tardio)', async () => {
+  const db = crearD1Fake();
+  const { peticionId, envio } = await crearEnvioPendiente(db);
+  const hace11min = new Date(Date.now() - 11 * 60 * 1000).toISOString();
+  await db.prepare("UPDATE envios SET estado = 'tomado', tomado_en = ?, lease_token = 'lt-2' WHERE id = ?").bind(hace11min, envio.id).run();
+  await obtenerPendientes(db, 10); // pasa a revision
+
+  const resultado = await reportarResultado(db, envio.id, true, 'ok tardio', 'lt-2');
+  assert.equal(resultado.ok, true);
+
+  const fila = await db.prepare('SELECT * FROM envios WHERE id = ?').bind(envio.id).first();
+  assert.equal(fila.estado, 'enviado');
+  const peticion = await db.prepare('SELECT * FROM peticiones WHERE id = ?').bind(peticionId).first();
+  assert.equal(peticion.estado, 'Enviada');
+});
+
+test('listarEnRevision devuelve los envios en revision', async () => {
+  const db = crearD1Fake();
+  const { envio } = await crearEnvioPendiente(db);
+  const hace11min = new Date(Date.now() - 11 * 60 * 1000).toISOString();
+  await db.prepare("UPDATE envios SET estado = 'tomado', tomado_en = ?, lease_token = 'lt-3' WHERE id = ?").bind(hace11min, envio.id).run();
+  await obtenerPendientes(db, 10);
+
+  const enRevision = await listarEnRevision(db);
+  assert.equal(enRevision.length, 1);
+  assert.equal(enRevision[0].id, envio.id);
+});
+
+test('reencolarRevision vuelve un envio en revision a pendiente', async () => {
+  const db = crearD1Fake();
+  const { envio } = await crearEnvioPendiente(db);
+  const hace11min = new Date(Date.now() - 11 * 60 * 1000).toISOString();
+  await db.prepare("UPDATE envios SET estado = 'tomado', tomado_en = ?, lease_token = 'lt-4' WHERE id = ?").bind(hace11min, envio.id).run();
+  await obtenerPendientes(db, 10);
+
+  const resultado = await reencolarRevision(db, envio.id);
+  assert.equal(resultado.ok, true);
+
+  const fila = await db.prepare('SELECT * FROM envios WHERE id = ?').bind(envio.id).first();
+  assert.equal(fila.estado, 'pendiente');
+  assert.equal(fila.lease_token, null);
+
+  const denuevo = await obtenerPendientes(db, 10);
+  assert.equal(denuevo.length, 1);
+});
+
+test('reencolarRevision sobre un envio que no esta en revision es un no-op', async () => {
+  const db = crearD1Fake();
+  const { envio } = await crearEnvioPendiente(db);
+  const resultado = await reencolarRevision(db, envio.id);
+  assert.equal(resultado.ok, false);
+});
+
+test('confirmarEnviadoManual marca el envio y su peticion como enviados sin pasar por el relay', async () => {
+  const db = crearD1Fake();
+  const { peticionId, envio } = await crearEnvioPendiente(db);
+  const hace11min = new Date(Date.now() - 11 * 60 * 1000).toISOString();
+  await db.prepare("UPDATE envios SET estado = 'tomado', tomado_en = ?, lease_token = 'lt-5' WHERE id = ?").bind(hace11min, envio.id).run();
+  await obtenerPendientes(db, 10);
+
+  const resultado = await confirmarEnviadoManual(db, envio.id);
+  assert.equal(resultado.ok, true);
+
+  const fila = await db.prepare('SELECT * FROM envios WHERE id = ?').bind(envio.id).first();
+  assert.equal(fila.estado, 'enviado');
+  const peticion = await db.prepare('SELECT * FROM peticiones WHERE id = ?').bind(peticionId).first();
+  assert.equal(peticion.estado, 'Enviada');
 });
 
 test('reportarResultado ok limpia marca y setea enviada_en de la peticion', async () => {

@@ -89,6 +89,61 @@ default) y NO configurar `EWS_*` en el Worker — el envío real sigue saliendo
 desde el `.exe --relay` en una PC municipal con acceso a Exchange, mientras se
 confirma que todo lo demás (dashboard, import, D1) funciona bien.
 
+### Login: rate limit de fuerza bruta (dos capas)
+
+`worker/lib/loginRateLimit.js` guarda los fallos en D1 (tabla
+`login_intentos`), con dos límites independientes:
+
+1. **Por IP+usuario**: 5 fallos / 15 minutos. Protege un usuario contra fuerza
+   bruta desde una misma IP.
+2. **Global por usuario** (clave `global:<usuario>`): 20 fallos / 1 hora
+   sumando TODAS las IPs. Sin este segundo tope, alguien con acceso a varias
+   IPs (proxy rotativo, VPN, etc.) podía evadir el límite (1) probando pocas
+   claves por IP y cambiando de IP entre tandas — especialmente peligroso
+   contra el usuario `admin` + PIN maestro.
+
+La IP se toma **exclusivamente** de `CF-Connecting-IP` (la cabecera que
+Cloudflare setea en el edge y el cliente NO puede falsificar). Ya NO se usa
+`x-forwarded-for` como fallback: esa cabecera la puede mandar cualquier
+cliente con cualquier valor, así que aceptarla permitía "declarar" una IP
+distinta en cada intento y esquivar el límite (1) sin siquiera cambiar de red.
+
+El incremento de cada clave (`fallos = fallos + 1` o reinicio si venció la
+ventana) es un único `INSERT ... ON CONFLICT DO UPDATE` (UPSERT atómico), no
+un `SELECT` seguido de un `UPDATE` separado — evita perder fallos por una
+carrera entre dos intentos fallidos concurrentes contra la misma clave.
+
+### Relay: envíos que quedan en 'revision' (no se re-liberan solos)
+
+Si el `.exe --relay` toma un envío (`estado='tomado'`) y no reporta resultado
+en 10 minutos (se cae a mitad de camino, pierde la VPN, etc.), **el envío NO
+vuelve solo a `pendiente`**: pasa a `estado='revision'`. Antes sí volvía a
+`pendiente` automáticamente, pero eso arriesgaba un correo duplicado real por
+EWS si el relay SÍ había alcanzado a enviarlo antes de caerse justo al
+reportar el resultado — el correo ya salió, y un segundo poll lo habría
+vuelto a tomar y reenviado a la comuna.
+
+Un envío en `revision`:
+
+- Aparece en un banner amarillo ("**Envío sin confirmar — revisar buzón
+  enviados antes de reintentar**") en el dashboard (`/index.html`) y en
+  Configuración (`/configuracion.html`), visible solo para usuarios `admin`
+  (`GET /api/envios/revision`).
+- El admin debe revisar el buzón de "Enviados" de Exchange para ese
+  destinatario y decidir:
+  - **Si el correo NO salió** → botón "Reencolar" (`POST
+    /api/envios/:id/reencolar`): vuelve el envío a `pendiente`, el relay lo
+    tomará de nuevo en el próximo poll.
+  - **Si el correo SÍ salió** → botón "Marcar enviado" (`POST
+    /api/envios/:id/confirmar`): marca el envío `enviado` y sus peticiones
+    como `Enviada` (arranca el plazo legal de 15 días hábiles), sin volver a
+    pasar por el relay.
+- Si en cambio el `.exe --relay` manda un reporte **tardío** para ese mismo
+  envío (con el `leaseToken` original, p.ej. porque solo se cortó la
+  conexión al reportar pero el proceso seguía vivo), `POST
+  /api/relay/resultado` lo sigue aceptando y resuelve el envío solo — el
+  admin no necesita intervenir en ese caso.
+
 ## 5. Crear el primer usuario admin
 
 No hay usuarios en la tabla `usuarios` recién creada la base. Login inicial

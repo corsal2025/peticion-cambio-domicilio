@@ -1,5 +1,6 @@
 import { api } from './api.js';
 import { esc } from './escape.js';
+import { montarBannerRevision } from './revision.js';
 
 const form = document.getElementById('form-config');
 const mensaje = document.getElementById('mensaje');
@@ -59,3 +60,4 @@ document.getElementById('form-usuario').addEventListener('submit', async (ev) =>
 
 cargarConfig();
 cargarUsuarios();
+montarBannerRevision(document.getElementById('banner-revision'));

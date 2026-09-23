@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS envios (
   asunto         TEXT NOT NULL,
   cuerpo_html    TEXT NOT NULL,
   estado         TEXT NOT NULL DEFAULT 'pendiente'
-                   CHECK (estado IN ('pendiente','tomado','enviado','error')),
+                   CHECK (estado IN ('pendiente','tomado','enviado','error','revision')),
   intentos       INTEGER NOT NULL DEFAULT 0,
   tomado_en      TEXT,
   lease_token    TEXT,
@@ -118,9 +118,10 @@ CREATE TABLE IF NOT EXISTS import_lotes (
   actualizado_en TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Rate limit de login: contador de fallos por clave (ip+usuario), con
--- bloqueo temporal tras 5 fallos en 15 minutos. Un login exitoso borra la
--- fila de esa clave.
+-- Rate limit de login: contador de fallos por clave. Dos capas: clave
+-- ip+usuario (5 fallos/15 min) y clave global 'global:<usuario>' (20
+-- fallos/1h sumando todas las IPs, para que rotar de IP no evada el
+-- bloqueo). Un login exitoso borra ambas filas de ese usuario.
 CREATE TABLE IF NOT EXISTS login_intentos (
   clave         TEXT PRIMARY KEY,
   fallos        INTEGER NOT NULL DEFAULT 0,

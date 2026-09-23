@@ -11,6 +11,7 @@ import { relayRoutes } from './routes/relay.js';
 import { configRoutes } from './routes/config.js';
 import { estadisticasRoutes } from './routes/estadisticas.js';
 import { usuariosRoutes } from './routes/usuarios.js';
+import { enviosRoutes } from './routes/envios.js';
 
 export const app = new Hono();
 
@@ -36,6 +37,7 @@ const admin = new Hono();
 admin.use('*', soloAdmin);
 admin.route('/', configRoutes);
 admin.route('/', usuariosRoutes);
+admin.route('/', enviosRoutes);
 api.route('/', admin);
 
 app.route('/api', api);

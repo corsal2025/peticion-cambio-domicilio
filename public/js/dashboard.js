@@ -2,6 +2,7 @@
 // todas (visibles), enviar marcadas, estado de carpeta, plazo legal.
 import { api, fold } from './api.js';
 import { esc } from './escape.js';
+import { montarBannerRevision } from './revision.js';
 
 const OPCIONES_CARPETA = [
   { valor: 'CAMBIO DE DOMICILIO SOLICITADO', etiqueta: '— sin subir —' },
@@ -204,3 +205,4 @@ document.getElementById('btn-logout').addEventListener('click', async () => {
 });
 
 cargar().catch((err) => mostrarMensaje(err.message, 'danger'));
+montarBannerRevision(document.getElementById('banner-revision'));
