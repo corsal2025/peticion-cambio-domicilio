@@ -19,37 +19,70 @@ export function crearD1Fake() {
   return wrap(sqlite);
 }
 
+// Contador de "subrequests" D1 para tests de presupuesto (Cloudflare Workers
+// FREE plan: 50 subrequests por invocacion; cada .run()/.first()/.all() Y cada
+// .batch() cuentan como UN subrequest, pero cada statement DENTRO de un
+// batch tambien cuenta contra el limite de 50 queries por invocacion). Ver
+// test/d1SubrequestBudget.test.js.
 function wrap(sqlite) {
+  const stats = { calls: 0, statements: 0 };
+
+  function crearStatement(sql) {
+    const stmt = sqlite.prepare(sql);
+    let boundArgs = [];
+    const obj = {
+      bind(...args) {
+        boundArgs = args;
+        return obj;
+      },
+      // Ejecucion real sin contar como subrequest aparte: la usa batch(),
+      // que ya contabiliza 1 llamada + N statements por su cuenta.
+      _runRaw() {
+        const info = stmt.run(...boundArgs);
+        return { success: true, meta: { last_row_id: Number(info.lastInsertRowid), changes: info.changes } };
+      },
+      async run() {
+        stats.calls++;
+        stats.statements++;
+        return obj._runRaw();
+      },
+      async first() {
+        stats.calls++;
+        stats.statements++;
+        return stmt.get(...boundArgs) ?? null;
+      },
+      async all() {
+        stats.calls++;
+        stats.statements++;
+        return { results: stmt.all(...boundArgs) };
+      },
+    };
+    return obj;
+  }
+
   return {
     prepare(sql) {
-      const stmt = sqlite.prepare(sql);
-      let boundArgs = [];
-      return {
-        bind(...args) {
-          boundArgs = args;
-          return this;
-        },
-        async run() {
-          const info = stmt.run(...boundArgs);
-          return { success: true, meta: { last_row_id: Number(info.lastInsertRowid), changes: info.changes } };
-        },
-        async first() {
-          return stmt.get(...boundArgs) ?? null;
-        },
-        async all() {
-          return { results: stmt.all(...boundArgs) };
-        },
-      };
+      return crearStatement(sql);
     },
     async batch(statements) {
+      stats.calls++;
+      stats.statements += statements.length;
       const resultados = [];
       for (const stmt of statements) {
-        resultados.push(await stmt.run());
+        resultados.push(stmt._runRaw());
       }
       return resultados;
     },
     exec(sql) {
       sqlite.exec(sql);
+    },
+    // --- instrumentacion para tests de presupuesto de subrequests D1 ---
+    stats() {
+      return { calls: stats.calls, statements: stats.statements };
+    },
+    resetStats() {
+      stats.calls = 0;
+      stats.statements = 0;
     },
   };
 }
