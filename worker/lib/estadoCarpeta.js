@@ -57,6 +57,29 @@ export function rango(estadoCrudo) {
   return esFinalizado(e) ? 3 : 0;
 }
 
+/**
+ * Version SQL de `rango()`, para usar dentro de un UPDATE/UPSERT masivo
+ * (ver worker/lib/importar.js) sin tener que traer cada fila a JS para
+ * decidir si el estado_carpeta entrante avanza o no. Generada a partir de
+ * las MISMAS constantes que `rango()` (VALORES/FINALIZADOS) para que ambas
+ * nunca queden desincronizadas.
+ *
+ * @param {string} expr expresion SQL que evalua a un estado_carpeta ya
+ *   normalizado (ej. `excluded.estado_carpeta` o `peticiones.estado_carpeta`).
+ */
+export function rangoSql(expr) {
+  const partes = [`CASE ${expr}`, `WHEN '${escaparSql('CAMBIO DE DOMICILIO')}' THEN 1`, `WHEN '${escaparSql('CAMBIO DE DOMICILIO SOLICITADO')}' THEN 2`];
+  for (const v of FINALIZADOS) {
+    partes.push(`WHEN '${escaparSql(v)}' THEN 3`);
+  }
+  partes.push('ELSE 0 END');
+  return partes.join(' ');
+}
+
+function escaparSql(v) {
+  return v.replace(/'/g, "''");
+}
+
 export const SIN_SUBIR = 'CAMBIO DE DOMICILIO SOLICITADO';
 export const SUBIDA_CONASET = 'CAMBIO DOM. SUBIDO A CONASET';
 export const SUBIDA_CORREO = 'CAMBIO DOM. SUBIDO CON CORREO';
