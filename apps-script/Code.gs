@@ -53,7 +53,12 @@ var CONFIG = {
     fechaSubidaCarpeta: 'FECHA CUANDO SE SUBIO LA CARPETA',
     clases: 'CLASES',
   },
-  MAX_FILAS_POR_LOTE: 500,
+  // Cloudflare Workers FREE plan: 50 subrequests por invocacion. El worker
+  // procesa cada lote set-based (pocos D1 calls, no uno por fila), pero un
+  // lote mas chico reduce igual el tamaño del payload/JSON bindeado por
+  // statement y el tiempo de una sola invocacion. Bajado de 500 a 200.
+  MAX_FILAS_POR_LOTE: 200,
+  MAX_CONTACTOS_POR_LOTE: 200,
   FILAS_MAX_ENCABEZADO: 8,
 };
 
@@ -342,24 +347,35 @@ function sincronizarContactosComunas_(workerUrl, importSecret, libro, avisos) {
       return { nuevos: 0, actualizados: 0 };
     }
 
-    var url = workerUrl.replace(/\/+$/, '') + '/api/comunas/sync';
-    var respuesta = UrlFetchApp.fetch(url, {
-      method: 'post',
-      contentType: 'application/json',
-      headers: { 'X-Import-Secret': importSecret },
-      payload: JSON.stringify({ contactos: contactos }),
-      muteHttpExceptions: true,
-    });
+    // Igual que /api/import: se reparte en lotes chicos (payload/tamaño de
+    // statement bindeado), aunque el worker ya procesa cada request set-based.
+    var lotesContactos = partirEnLotes_(contactos, CONFIG.MAX_CONTACTOS_POR_LOTE);
+    var totalNuevos = 0;
+    var totalActualizados = 0;
 
-    var codigo = respuesta.getResponseCode();
-    var cuerpo = respuesta.getContentText();
-    if (codigo < 200 || codigo >= 300) {
-      avisos.push('POST /api/comunas/sync fallo (' + codigo + '): ' + cuerpo);
-      return { nuevos: 0, actualizados: 0 };
+    for (var i = 0; i < lotesContactos.length; i++) {
+      var url = workerUrl.replace(/\/+$/, '') + '/api/comunas/sync';
+      var respuesta = UrlFetchApp.fetch(url, {
+        method: 'post',
+        contentType: 'application/json',
+        headers: { 'X-Import-Secret': importSecret },
+        payload: JSON.stringify({ contactos: lotesContactos[i] }),
+        muteHttpExceptions: true,
+      });
+
+      var codigo = respuesta.getResponseCode();
+      var cuerpo = respuesta.getContentText();
+      if (codigo < 200 || codigo >= 300) {
+        avisos.push('POST /api/comunas/sync fallo (' + codigo + '): ' + cuerpo);
+        continue;
+      }
+
+      var parsed = JSON.parse(cuerpo);
+      totalNuevos += parsed.nuevos || 0;
+      totalActualizados += parsed.actualizados || 0;
     }
 
-    var parsed = JSON.parse(cuerpo);
-    return { nuevos: parsed.nuevos || 0, actualizados: parsed.actualizados || 0 };
+    return { nuevos: totalNuevos, actualizados: totalActualizados };
   } catch (e) {
     avisos.push('Sincronizacion de correos de comunas fallo: ' + e.message);
     return { nuevos: 0, actualizados: 0 };
