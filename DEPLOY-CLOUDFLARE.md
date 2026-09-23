@@ -63,6 +63,17 @@ npx wrangler pages secret put IMPORT_SECRET --project-name=peticion-cambio-domic
 npx wrangler pages secret put RELAY_SECRET --project-name=peticion-cambio-domicilio
 ```
 
+`SESSION_SECRET` es obligatorio: si falta, el worker responde 500 (fail
+closed) en `/api/auth/*` y en toda ruta protegida — nunca cae a un secreto
+por defecto en producción. El único fallback permitido es para desarrollo
+local, activándolo explícitamente con `DEV=1` en `.dev.vars`
+(`wrangler pages dev` lo carga automáticamente):
+
+```
+# .dev.vars (NO commitear)
+DEV=1
+```
+
 Solo si en algún momento se activa `MAIL_MODE=direct` (envío directo desde el
 Worker, sin pasar por el `.exe --relay`):
 

@@ -8,6 +8,33 @@ function env(db) {
   return { DB: db, SESSION_SECRET: 'secreto-test', MASTER_PIN: '1234' };
 }
 
+test('sin SESSION_SECRET y sin DEV, login responde 500 (fail closed)', async () => {
+  const db = crearD1Fake();
+  const res = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'jefe', clave: '1234' }),
+  }, { DB: db, MASTER_PIN: '1234' });
+  assert.equal(res.status, 500);
+});
+
+test('sin SESSION_SECRET y sin DEV, rutas protegidas responden 500 (fail closed) en vez de 401', async () => {
+  const db = crearD1Fake();
+  const res = await app.request('/api/peticiones', {}, { DB: db, MASTER_PIN: '1234' });
+  assert.equal(res.status, 500);
+});
+
+test('sin SESSION_SECRET pero con DEV=1, usa fallback local y funciona', async () => {
+  const db = crearD1Fake();
+  const e = { DB: db, MASTER_PIN: '1234', DEV: '1' };
+  const loginRes = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'jefe', clave: '1234' }),
+  }, e);
+  assert.equal(loginRes.status, 200);
+});
+
 test('GET /api/peticiones sin sesion responde 401', async () => {
   const db = crearD1Fake();
   const res = await app.request('/api/peticiones', {}, env(db));
