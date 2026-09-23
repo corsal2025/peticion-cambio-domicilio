@@ -43,7 +43,7 @@ configRoutes.post('/mail/prueba', async (c) => {
   }
 
   await c.env.DB
-    .prepare('INSERT INTO envios (peticion_id, para, asunto, cuerpo_html) VALUES (0, ?, ?, ?)')
+    .prepare('INSERT INTO envios (peticion_id, para, asunto, cuerpo_html) VALUES (NULL, ?, ?, ?)')
     .bind(testEmail, asunto, cuerpo)
     .run();
   return c.json({ ok: true, modo, destinatario: testEmail, mensaje: 'Encolado para el relay.' });

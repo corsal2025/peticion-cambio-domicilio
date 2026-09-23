@@ -20,7 +20,10 @@ test('verificarSesion rechaza una cookie firmada con otro secreto', async () => 
 test('verificarSesion rechaza una cookie manipulada', async () => {
   const cookie = await firmarSesion({ usuario: 'jperez', rol: 'staff' }, 'secreto-test');
   const [payload, firma] = cookie.split('.');
-  const firmaManipulada = firma.slice(0, -1) + (firma.at(-1) === 'A' ? 'B' : 'A');
+  const idx = Math.floor(firma.length / 2);
+  const original = firma[idx];
+  const reemplazo = original === 'A' ? 'B' : 'A';
+  const firmaManipulada = firma.slice(0, idx) + reemplazo + firma.slice(idx + 1);
   const sesion = await verificarSesion(`${payload}.${firmaManipulada}`, 'secreto-test');
   assert.equal(sesion, null);
 });

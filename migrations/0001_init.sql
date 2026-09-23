@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 
 CREATE TABLE IF NOT EXISTS envios (
   id             INTEGER PRIMARY KEY,
-  peticion_id    INTEGER NOT NULL REFERENCES peticiones(id),
+  peticion_id    INTEGER REFERENCES peticiones(id),
   para           TEXT NOT NULL,
   asunto         TEXT NOT NULL,
   cuerpo_html    TEXT NOT NULL,
