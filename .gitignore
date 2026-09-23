@@ -18,3 +18,4 @@ CLAVES-CLOUDFLARE.txt
 # metadata de clasp (contiene el scriptId, es per-usuario).
 apps-script/Config.gs
 apps-script/.clasp.json
+.clasp.json
