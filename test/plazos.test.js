@@ -42,6 +42,21 @@ test('plazoInfo vencida cuando pasaron mas de 15 dias habiles', () => {
   assert.ok(info.diasRestantes < 0);
 });
 
+test('plazoInfo usa la fecha local de Chile para "inicio", no el dia UTC', () => {
+  // 2026-01-06T02:30:00Z = 2026-01-05 23:30 hora de Chile (UTC-3 en verano).
+  // Truncar el ISO en UTC daria inicio=2026-01-06 (un dia adelantado).
+  const info = plazoInfo({ enviadaEn: '2026-01-06T02:30:00.000Z' }, new Date('2026-01-10'));
+  assert.equal(info.inicio, '2026-01-05');
+});
+
+test('plazoInfo usa la fecha local de Chile para "hoy", no el dia UTC', () => {
+  // 2026-01-10T02:00:00Z = 2026-01-09 23:00 hora de Chile: "hoy" debe ser
+  // 2026-01-09, no 2026-01-10 (que contaria un dia habil de mas).
+  const info = plazoInfo({ enviadaEn: '2026-01-05T12:00:00.000Z' }, new Date('2026-01-10T02:00:00.000Z'));
+  const esperado = plazoInfo({ enviadaEn: '2026-01-05T12:00:00.000Z' }, new Date('2026-01-09T15:00:00.000Z'));
+  assert.equal(info.diasTranscurridos, esperado.diasTranscurridos);
+});
+
 test('plazoInfo en plazo cuando aun quedan dias', () => {
   const info = plazoInfo({ enviadaEn: '2026-01-05T00:00:00' }, new Date('2026-01-06'));
   assert.equal(info.vencido, false);

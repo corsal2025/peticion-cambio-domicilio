@@ -20,6 +20,25 @@ function toISODate(date) {
   return date.toISOString().slice(0, 10);
 }
 
+const FORMATO_FECHA_SANTIAGO = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Santiago',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/**
+ * Fecha local de Chile (America/Santiago) de un instante, como 'YYYY-MM-DD'.
+ * Paridad con el .NET (`EnviadaEn.LocalDateTime` / `DateTime.Now`, hora de
+ * Chile): un envio a las 23:30 en Chile cuenta para ESE dia, aunque su
+ * timestamp UTC ya sea el dia siguiente (offset UTC-3/UTC-4 segun horario
+ * de verano). Truncar el ISO en UTC directamente adelanta el inicio del
+ * plazo un dia entero cerca de la medianoche chilena.
+ */
+function fechaLocalSantiago(date) {
+  return FORMATO_FECHA_SANTIAGO.format(date);
+}
+
 function esFinDeSemana(date) {
   const dow = date.getUTCDay();
   return dow === 0 || dow === 6;
@@ -61,13 +80,13 @@ export function businessDaysBetween(from, to, feriados = new Set()) {
  * @param {Date} [ahora] inyectable para tests
  */
 export function plazoInfo(peticion, ahora = new Date(), feriados = new Set()) {
-  const inicio = peticion.enviadaEn ? toISODate(parseFecha(peticion.enviadaEn)) : null;
+  const inicio = peticion.enviadaEn ? fechaLocalSantiago(new Date(peticion.enviadaEn)) : null;
 
   if (inicio === null) {
     return { inicio: null, vence: null, diasTranscurridos: 0, diasRestantes: PLAZO_DIAS_HABILES, vencido: false };
   }
 
-  const hoy = toISODate(ahora);
+  const hoy = fechaLocalSantiago(ahora);
   const vence = addBusinessDays(inicio, PLAZO_DIAS_HABILES, feriados);
   const diasTranscurridos = businessDaysBetween(inicio, hoy, feriados);
   const diasRestantes = PLAZO_DIAS_HABILES - diasTranscurridos;
