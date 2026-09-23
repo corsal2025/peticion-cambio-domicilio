@@ -1,4 +1,5 @@
 # Despliegue a Cloudflare (pasos manuales)
+n> Atajo: `powershell -ExecutionPolicy Bypass -File deploy/cloudflare-deploy.ps1` hace los pasos 1-5 solo (la base D1 ya esta creada, id en wrangler.toml).
 
 Todo lo de código ya está hecho (Batches 1-11 de la migración). Esto es lo que
 falta hacer a mano — nada de esto lo puede hacer un agente porque toca cuentas
@@ -147,11 +148,11 @@ Un envío en `revision`:
 ## 5. Crear el primer usuario admin
 
 No hay usuarios en la tabla `usuarios` recién creada la base. Login inicial
-con el `MASTER_PIN` configurado arriba (cualquier nombre de usuario, con esa
-clave, entra como admin):
+con el usuario fijo `admin` y el `MASTER_PIN` configurado arriba (otro nombre
+no sirve):
 
 ```
-POST /api/auth/login  { "usuario": "tu-nombre", "clave": "<MASTER_PIN>" }
+POST /api/auth/login  { "usuario": "admin", "clave": "<MASTER_PIN>" }
 ```
 
 Una vez adentro, crear usuarios reales desde `/configuracion.html` (usa

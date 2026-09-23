@@ -10,3 +10,6 @@ node_modules/
 .wrangler/
 migrations/seed/
 .dev.vars
+
+# Claves generadas por deploy/cloudflare-deploy.ps1
+CLAVES-CLOUDFLARE.txt

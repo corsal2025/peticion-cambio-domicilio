@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "peticion-cambio-domicilio-db"
-database_id = "REEMPLAZAR-DESPUES-DE-wrangler-d1-create"
+database_id = "31e33b53-48cb-4df0-a21d-005f5322b653"
 migrations_dir = "migrations"
 
 # Variables secretas (SESSION_SECRET, MASTER_PIN, IMPORT_SECRET, RELAY_SECRET,
