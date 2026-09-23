@@ -13,3 +13,8 @@ migrations/seed/
 
 # Claves generadas por deploy/cloudflare-deploy.ps1
 CLAVES-CLOUDFLARE.txt
+
+# Secrets/config local de Apps Script (ver apps-script/Config.example.gs) y
+# metadata de clasp (contiene el scriptId, es per-usuario).
+apps-script/Config.gs
+apps-script/.clasp.json

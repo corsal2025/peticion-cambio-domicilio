@@ -1,20 +1,39 @@
 /**
  * Sincronizacion Drive -> Worker Cloudflare.
  *
- * Lee el libro "DETALLE CARPETAS" (bound a esta planilla o referenciado por
- * PropertiesService.SPREADSHEET_ID), recorre cada hoja de agenda mensual, se
- * queda con las filas cuyo estado de carpeta es "CAMBIO DE DOMICILIO" o una
- * etapa posterior del mismo flujo (SOLICITADO / SUBIDA...) y las envia por
- * POST a /api/import del worker, autenticado con el header X-Import-Secret.
+ * Script STANDALONE (no bound a ninguna planilla). El archivo real,
+ * "DETALLE CARPETAS DEPTO. LICENCIAS DE CONDUCIR 2026.xlsx", es un .xlsx
+ * (no un Google Sheet nativo) que vive en una carpeta de Drive compartido, y
+ * SpreadsheetApp no puede abrir un .xlsx directamente. Por eso cada
+ * sincronizacion: (1) usa el servicio avanzado de Drive (v3) para copiar el
+ * .xlsx convirtiendolo a Google Sheet nativo (application/vnd.google-apps.
+ * spreadsheet) en el Drive del dueno del script, (2) abre esa copia con
+ * SpreadsheetApp.openById, (3) recorre cada hoja de agenda mensual, se queda
+ * con las filas cuyo estado de carpeta es "CAMBIO DE DOMICILIO" o una etapa
+ * posterior del mismo flujo (SOLICITADO / SUBIDA...) y las envia por POST a
+ * /api/import del worker, autenticado con el header X-Import-Secret, y (4)
+ * SIEMPRE borra (trashea) la copia temporal en un bloque finally, se haya
+ * o no completado el envio.
  *
  * Es un port 1:1 (en lo que aplica) de
  * PeticionCambioDomicilio.Excel.ExcelPeticionImporter (ver ese archivo para
  * el detalle de las reglas de negocio).
  *
- * Configuracion via Project Settings > Script properties:
+ * Configuracion via Project Settings > Script properties (o correr
+ * `configurar()` una vez si existe apps-script/Config.gs, ver
+ * Config.example.gs):
  *   WORKER_URL     -> ej. https://peticion-cambio-domicilio.pages.dev
  *   IMPORT_SECRET  -> mismo valor que el secret IMPORT_SECRET del worker
- *   SPREADSHEET_ID -> opcional; vacio = usa SpreadsheetApp.getActive()
+ *   XLSX_FILE_ID   -> id del archivo .xlsx en Drive (ver DEPLOY-CLOUDFLARE.md
+ *                     seccion 6 para como obtenerlo)
+ *   SPREADSHEET_ID -> opcional; alternativa a XLSX_FILE_ID si el usuario ya
+ *                     convirtio el libro a Google Sheet nativo a mano. Si
+ *                     esta seteada, tiene prioridad sobre XLSX_FILE_ID y NO
+ *                     pasa por el paso de copiar/trashear.
+ *
+ * Requiere el servicio avanzado "Drive" (v3) habilitado en appsscript.json
+ * (dependencies.enabledAdvancedServices) para poder copiar/trashear el
+ * .xlsx.
  */
 
 var CONFIG = {
@@ -39,36 +58,64 @@ var CONFIG = {
 };
 
 // --------------------------------------------------------------------------
-// Menu / trigger
+// Configuracion / trigger
 // --------------------------------------------------------------------------
+//
+// Nota: este es un script STANDALONE (no bound a una planilla), asi que NO
+// tiene onOpen()/menu de UI: no hay una planilla que lo abra. Se opera desde
+// el propio editor de Apps Script (ver DEPLOY-CLOUDFLARE.md seccion 6):
+// correr configurar() (si hay Config.gs) o cargar las Script Properties a
+// mano, despues installTrigger() una vez, y sincronizarAhora() para forzar
+// una corrida manual.
 
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('Cambio de domicilio')
-    .addItem('Sincronizar ahora', 'sincronizarAhora')
-    .addToUi();
+/**
+ * Escribe WORKER_URL / IMPORT_SECRET / XLSX_FILE_ID en Script Properties a
+ * partir de CONFIG_() (definida en el archivo gitignorado apps-script/Config.gs;
+ * copiar desde Config.example.gs). Permite que `clasp push` entregue secrets
+ * sin comitearlos. Correr una vez a mano desde el editor despues de cada push
+ * (o cada vez que cambien los valores).
+ */
+function configurar() {
+  if (typeof CONFIG_ !== 'function') {
+    throw new Error('Falta apps-script/Config.gs (copiar desde Config.example.gs y completar los valores, despues clasp push).');
+  }
+  var valores = CONFIG_();
+  var props = PropertiesService.getScriptProperties();
+  var escritas = [];
+  ['WORKER_URL', 'IMPORT_SECRET', 'XLSX_FILE_ID'].forEach(function (clave) {
+    if (valores[clave]) {
+      props.setProperty(clave, valores[clave]);
+      escritas.push(clave);
+    }
+  });
+  Logger.log('OK: Script properties actualizadas (' + escritas.join(', ') + ').');
 }
 
 /** Instala el time trigger de sincronizacion automatica (correr una vez a mano). */
 function installTrigger() {
   ScriptApp.getProjectTriggers()
-    .filter(function (t) { return t.getHandlerFunction() === 'sincronizarAhora'; })
+    .filter(function (t) { return t.getHandlerFunction() === 'sincronizarProgramada'; })
     .forEach(function (t) { ScriptApp.deleteTrigger(t); });
 
-  ScriptApp.newTrigger('sincronizarAhora')
+  ScriptApp.newTrigger('sincronizarProgramada')
     .timeBased()
-    .everyMinutes(30)
+    .everyMinutes(15)
     .create();
 }
 
-/** Entry point del menu y del trigger. */
+/**
+ * Entry point manual (correr a mano desde el editor de Apps Script). Siempre
+ * fuerza la sincronizacion completa, aunque el .xlsx no haya cambiado desde
+ * la ultima corrida (asi sirve para probar cambios recien hechos en el
+ * Excel o en la configuracion sin esperar al proximo modifiedTime).
+ */
 function sincronizarAhora() {
-  var resultado = sincronizar_();
+  var resultado = sincronizar_(true);
   var ui;
   try {
     ui = SpreadsheetApp.getUi();
   } catch (e) {
-    ui = null; // corriendo desde el trigger, sin UI
+    ui = null; // script standalone: no hay UI de planilla disponible
   }
   if (ui) {
     ui.alert(
@@ -83,21 +130,108 @@ function sincronizarAhora() {
   return resultado;
 }
 
+/**
+ * Entry point del trigger de tiempo (ver installTrigger). NO fuerza: si el
+ * .xlsx no cambio desde la ultima sincronizacion exitosa, se omite para
+ * ahorrar cuota de Drive/UrlFetch.
+ */
+function sincronizarProgramada() {
+  return sincronizar_(false);
+}
+
 // --------------------------------------------------------------------------
 // Nucleo
 // --------------------------------------------------------------------------
 
-function sincronizar_() {
+/**
+ * Resuelve la fuente (xlsx a copiar/trashear, o Google Sheet ya nativo via
+ * SPREADSHEET_ID), aplica el chequeo de "sin cambios" cuando corresponde y
+ * delega la extraccion/envio real a sincronizarLibro_.
+ *
+ * @param {boolean} forzar Si es true, ignora el chequeo de modifiedTime sin
+ *   cambios (usado por sincronizarAhora). El trigger programado pasa false.
+ */
+function sincronizar_(forzar) {
   var props = PropertiesService.getScriptProperties();
   var workerUrl = props.getProperty('WORKER_URL');
   var importSecret = props.getProperty('IMPORT_SECRET');
   var spreadsheetId = props.getProperty('SPREADSHEET_ID');
+  var xlsxFileId = props.getProperty('XLSX_FILE_ID');
 
   if (!workerUrl || !importSecret) {
     throw new Error('Faltan WORKER_URL y/o IMPORT_SECRET en Script properties.');
   }
+  if (!spreadsheetId && !xlsxFileId) {
+    throw new Error('Falta XLSX_FILE_ID (o SPREADSHEET_ID) en Script properties.');
+  }
 
-  var libro = spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : SpreadsheetApp.getActive();
+  // Camino manual: el usuario ya convirtio el .xlsx a Google Sheet nativo y
+  // dejo el id en SPREADSHEET_ID. No hay copia que trashear ni modifiedTime
+  // que chequear (el propio Sheet ya es la fuente).
+  if (spreadsheetId) {
+    var libroNativo = SpreadsheetApp.openById(spreadsheetId);
+    return sincronizarLibro_(workerUrl, importSecret, libroNativo);
+  }
+
+  // Camino standalone (default): XLSX_FILE_ID apunta al .xlsx real en el
+  // Drive compartido. SpreadsheetApp no puede abrirlo directo, asi que se
+  // copia convirtiendolo a Google Sheet con el servicio avanzado de Drive
+  // (v3), se procesa la copia y SIEMPRE se trashea al final.
+  var metadata = Drive.Files.get(xlsxFileId, {
+    fields: 'modifiedTime,name',
+    supportsAllDrives: true,
+  });
+  var modifiedTime = metadata.modifiedTime;
+  var ultimoSincronizado = props.getProperty('XLSX_LAST_SYNCED_MODIFIED');
+
+  if (!forzar && ultimoSincronizado && ultimoSincronizado === modifiedTime) {
+    return {
+      hojasLeidas: 0,
+      filas: [],
+      avisos: ['Sin cambios en el xlsx desde la ultima sincronizacion (modifiedTime ' + modifiedTime + '); se omite para ahorrar cuota.'],
+      recibidas: 0,
+      insertadas: 0,
+      actualizadas: 0,
+      eliminadas: 0,
+      comunasNuevos: 0,
+      comunasActualizados: 0,
+      omitido: true,
+    };
+  }
+
+  var copia = Drive.Files.copy(
+    {
+      name: 'TEMP sync - ' + metadata.name + ' - ' + new Date().toISOString(),
+      mimeType: 'application/vnd.google-apps.spreadsheet',
+    },
+    xlsxFileId,
+    { supportsAllDrives: true },
+  );
+  var tempFileId = copia.id;
+
+  try {
+    var libroTemporal = SpreadsheetApp.openById(tempFileId);
+    var resultado = sincronizarLibro_(workerUrl, importSecret, libroTemporal);
+    props.setProperty('XLSX_LAST_SYNCED_MODIFIED', modifiedTime);
+    return resultado;
+  } finally {
+    // SIEMPRE trashear la copia temporal, haya o no completado el envio, para
+    // no acumular archivos huerfanos en el Drive del dueno del script.
+    try {
+      Drive.Files.update({ trashed: true }, tempFileId, null, { supportsAllDrives: true });
+    } catch (e) {
+      Logger.log('No se pudo trashear la copia temporal ' + tempFileId + ': ' + e.message);
+    }
+  }
+}
+
+/**
+ * Extrae filas y sincroniza comunas contra un libro ya abierto (nativo Google
+ * Sheet: copia temporal del xlsx, o el SPREADSHEET_ID manual) y las envia al
+ * worker. Es el mismo cuerpo que antes tenia sincronizar_() cuando el script
+ * era bound a la planilla.
+ */
+function sincronizarLibro_(workerUrl, importSecret, libro) {
   var extraido = extraerFilas_(libro);
 
   // Sincroniza el directorio de correos de comunas (hoja "CORREOS CAMBIO DE

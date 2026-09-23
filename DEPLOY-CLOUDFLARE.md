@@ -160,23 +160,88 @@ Una vez adentro, crear usuarios reales desde `/configuracion.html` (usa
 
 ## 6. Instalar el Apps Script (import automático)
 
-1. Abrir la planilla "DETALLE CARPETAS" en Google Sheets (o `clasp create`
-   un proyecto standalone si se prefiere no atarlo a la planilla).
-2. `Extensiones > Apps Script`, pegar `apps-script/Code.gs` y
-   `apps-script/appsscript.json` (o usar `clasp push` apuntando a esa
-   carpeta).
-3. `Configuración del proyecto > Propiedades del script`, agregar:
+El archivo real, **"DETALLE CARPETAS DEPTO. LICENCIAS DE CONDUCIR
+2026.xlsx"**, es un `.xlsx` (no un Google Sheet nativo) guardado en una
+carpeta de un Drive compartido. `SpreadsheetApp` no puede abrir un `.xlsx`
+directamente ni un script puede quedar "bound" a un `.xlsx`, así que
+`apps-script/` es un script **standalone**: en cada corrida usa el servicio
+avanzado de Drive para copiar el `.xlsx` convirtiéndolo a Google Sheet
+nativo, lo procesa, y **siempre** borra (trashea) esa copia temporal al
+terminar (haya ido bien o mal el envío).
+
+### Obtener el `XLSX_FILE_ID`
+
+Abrir el archivo en la web de Drive (buscarlo dentro de "DEPTO. LICENCIAS DE
+CONDUCIR/2026/") y copiar el id de la URL:
+
+```
+https://drive.google.com/file/d/ESTE_ES_EL_ID/view
+```
+
+### Camino A: `clasp` (recomendado)
+
+1. Instalar clasp (global o con `npx`): `npm i -g @google/clasp`.
+2. Habilitar la Apps Script API una vez para tu cuenta:
+   https://script.google.com/home/usersettings (toggle "activada").
+3. `clasp login` — abre el navegador para autorizar la cuenta que va a ser
+   dueña del script (y de las copias temporales que crea en su Drive).
+4. Crear el proyecto standalone apuntando a la carpeta `apps-script/`:
+   ```
+   cd apps-script
+   clasp create --type standalone --title "Sync Peticion Cambio Domicilio" --rootDir .
+   ```
+   Esto genera `apps-script/.clasp.json` (gitignorado; tiene el `scriptId`,
+   es per-usuario).
+5. (Opcional pero recomendado) Copiar `Config.example.gs` a `Config.gs` en la
+   misma carpeta y completar `WORKER_URL`, `IMPORT_SECRET` y `XLSX_FILE_ID`.
+   `Config.gs` está gitignorado — así `clasp push` entrega los secrets al
+   editor sin comitearlos, y `.claspignore` excluye `Config.example.gs` del
+   push (no tiene sentido subir la plantilla).
+6. `clasp push` — sube `Code.gs`, `appsscript.json` y, si existe,
+   `Config.gs`.
+7. Abrir el proyecto en el editor (`clasp open`) y correr, en este orden,
+   cada función desde el menú "Ejecutar":
+   - `configurar()` — si subiste `Config.gs`, vuelca sus valores a Script
+     Properties (revisar "Registros de ejecución": debe loguear `OK: Script
+     properties actualizadas (...)`). Si no usaste `Config.gs`, cargar
+     `WORKER_URL` / `IMPORT_SECRET` / `XLSX_FILE_ID` a mano en
+     `Configuración del proyecto > Propiedades del script`.
+   - `installTrigger()` — instala el disparador cada 15 minutos
+     (`sincronizarProgramada`). La primera vez pedirá aceptar los permisos
+     OAuth (Drive + Sheets + `UrlFetchApp`); aceptar todos.
+   - `sincronizarAhora()` — fuerza una sincronización manual completa (no
+     respeta el chequeo de "sin cambios"), útil para validar que todo quedó
+     bien configurado antes de esperar al trigger.
+
+### Camino B: copiar y pegar a mano
+
+1. En https://script.google.com, crear un proyecto nuevo (queda standalone
+   por defecto).
+2. Pegar el contenido de `apps-script/Code.gs` en `Code.gs`.
+3. `Configuración del proyecto > Editor de appsscript.json` (activar "Mostrar
+   archivo de manifiesto") y reemplazar su contenido por el de
+   `apps-script/appsscript.json` (habilita el servicio avanzado de Drive v3 y
+   declara los scopes).
+4. `Configuración del proyecto > Propiedades del script`, agregar:
    - `WORKER_URL` → la URL del proyecto Pages (ej.
      `https://peticion-cambio-domicilio.pages.dev`)
    - `IMPORT_SECRET` → el mismo valor puesto en el secret del Worker (se usa
      tanto para `/api/import` como para `/api/comunas/sync`)
-   - `SPREADSHEET_ID` → opcional, solo si el script no está bound a la
-     planilla (`clasp create --type standalone`)
-4. Correr `installTrigger` una vez a mano desde el editor de Apps Script
-   (menú Ejecutar) para instalar el disparador cada 30 minutos. Aceptar los
-   permisos OAuth que pida (Sheets + `UrlFetchApp`).
-5. Recargar la planilla: debería aparecer el menú "Cambio de domicilio >
-   Sincronizar ahora" para forzar una sincronización manual.
+   - `XLSX_FILE_ID` → el id obtenido arriba
+   - `SPREADSHEET_ID` → opcional; solo si preferís convertir el `.xlsx` a
+     Google Sheet una vez a mano y apuntar el script directo a esa copia
+     permanente en lugar de copiar/trashear en cada corrida
+5. Correr `installTrigger` una vez a mano desde el editor (menú Ejecutar)
+   para instalar el disparador cada 15 minutos. Aceptar los permisos OAuth
+   que pida (Drive + Sheets + `UrlFetchApp`).
+6. Correr `sincronizarAhora` una vez a mano para validar la configuración.
+
+### Troubleshooting general
+
+Las ejecuciones (manuales y del trigger) quedan en "Ver > Registros de
+ejecución" del editor de Apps Script — ahí aparecen tanto los `Logger.log`
+propios (`configurar()`, fallos al trashear la copia temporal) como
+cualquier excepción no capturada.
 
 **Contrato de import por lotes (relevante si se toca el worker o el script):**
 el libro real tiene ~4400 filas relevantes, así que Apps Script siempre reparte
@@ -196,7 +261,8 @@ vez de tocar la base. El tracking intermedio vive en las tablas D1
 solo al finalizar cada `syncId`.
 
 **Sincronización de correos de comunas:** en la misma corrida de
-`sincronizarAhora`/`installTrigger`, Apps Script también lee la hoja cuyo
+`sincronizarAhora`/`sincronizarProgramada` (la que dispara el trigger cada 15
+minutos), Apps Script también lee la hoja cuyo
 nombre contiene "correos cambio de dom" (la hoja "CORREOS CAMBIO DE
 DOMICLIO" del libro real, con columnas Municipio/Correo — mismo formato que
 lee `ComunaDirectory.ImportFromWorkbook` en el `.exe` legado) y hace `POST
@@ -215,13 +281,14 @@ sincronización deja un renglón en `sync_log` con `fuente =
 > real del proyecto Pages (sin `/` final ni typos); (2) `IMPORT_SECRET` en
 > las Script Properties es exactamente el mismo valor que el secret
 > `IMPORT_SECRET` del Worker (`npx wrangler pages secret put IMPORT_SECRET
-> ...`); (3) `SPREADSHEET_ID` (si se usó un script standalone) apunta al
-> libro correcto. Después de corregir, correr `sincronizarAhora` desde el
-> menú "Cambio de domicilio" de la planilla — el `ui.alert` final muestra
-> hojas leídas, filas de peticiones enviadas, contactos de comunas
-> nuevos/actualizados y la cantidad de avisos; y cualquier error de red
-> queda además en los "Registros de ejecución" del editor de Apps Script
-> (`Ver > Registros` o `Ejecución > Registros de ejecución`).
+> ...`); (3) `XLSX_FILE_ID` apunta al archivo `.xlsx` correcto y la cuenta
+> dueña del script tiene acceso a la carpeta del Drive compartido (o, si se
+> usó `SPREADSHEET_ID` en su lugar, que apunte al libro correcto). Después de
+> corregir, correr `sincronizarAhora()` a mano desde el editor de Apps Script
+> — el valor de retorno (visible en "Ejecución > Ver registros de
+> ejecución") muestra hojas leídas, filas de peticiones enviadas, contactos
+> de comunas nuevos/actualizados y la cantidad de avisos; y cualquier error
+> de red o de la copia/trasheo del `.xlsx` queda además ahí mismo.
 
 ## 7. Arrancar el `.exe --relay` en una PC municipal
 
