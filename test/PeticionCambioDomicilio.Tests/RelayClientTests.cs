@@ -155,6 +155,43 @@ public class RelayClientTests
     }
 
     [Fact]
+    public async Task RunOnceAsync_no_reporta_ok_false_si_el_envio_funciono_pero_fallo_el_reporte()
+    {
+        // El envio se hace bien (SendAsync no lanza), pero el POST /api/relay/resultado
+        // falla siempre (500). No debe reportarse ok:false: eso re-encolaria un correo
+        // que YA salio y produciria un envio duplicado. El worker resuelve el lease
+        // vencido moviendolo a 'revision' (no se re-libera a pendiente).
+        var pendientes = new[]
+        {
+            new { id = 1, para = "a@x.cl", asunto = "Asunto 1", cuerpo_html = "Cuerpo 1", lease_token = "lease-1" },
+        };
+        var intentosReporte = 0;
+
+        var handler = new FakeHttpMessageHandler(req =>
+        {
+            if (req.Method == HttpMethod.Get)
+            {
+                return Task.FromResult(Json(pendientes));
+            }
+
+            intentosReporte++;
+            return Task.FromResult(Json(new { error = "boom" }, HttpStatusCode.InternalServerError));
+        });
+
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://relay.local/") };
+        var mailSender = new FakeMailSender();
+        var client = new RelayClient(http, mailSender);
+
+        var resultado = await client.RunOnceAsync(10, CancellationToken.None);
+
+        Assert.Equal(1, resultado.Enviados);
+        Assert.Equal(0, resultado.Fallidos);
+        Assert.False(resultado.CredencialesRechazadas);
+        Assert.Single(mailSender.Enviados); // el envio no se reintenta ni se duplica
+        Assert.True(intentosReporte > 1); // reintenta el reporte varias veces
+    }
+
+    [Fact]
     public async Task ObtenerPendientes_manda_el_limite_y_el_secreto_configurados_en_el_header()
     {
         var handler = new FakeHttpMessageHandler(req =>

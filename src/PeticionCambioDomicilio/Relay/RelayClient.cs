@@ -47,8 +47,6 @@ public sealed class RelayClient
             try
             {
                 await _mailSender.SendAsync(envio.Para, envio.Asunto, envio.CuerpoHtml, cancellationToken);
-                await ReportarResultadoAsync(envio.Id, ok: true, detalle: null, envio.LeaseToken, cancellationToken);
-                enviados++;
             }
             catch (EwsAuthException ex)
             {
@@ -59,7 +57,17 @@ public sealed class RelayClient
             {
                 await ReportarResultadoAsync(envio.Id, ok: false, ex.Message, envio.LeaseToken, cancellationToken);
                 fallidos++;
+                continue;
             }
+
+            // El correo YA salio: de aca en mas solo estamos reportando el resultado.
+            // Un fallo del reporte NUNCA debe traducirse en ok:false, porque eso
+            // re-encolaria el envio y produciria un correo duplicado. Reintentamos
+            // el reporte unas pocas veces con ok:true; si sigue fallando, se deja
+            // asi: el worker mueve el lease vencido a 'revision' (no lo re-libera
+            // a pendiente), asi que no hay reenvio automatico.
+            await ReportarResultadoConReintentosAsync(envio.Id, envio.LeaseToken, cancellationToken);
+            enviados++;
         }
 
         return new RelayCycleResult(pendientes.Count, enviados, fallidos, CredencialesRechazadas: false);
@@ -119,5 +127,33 @@ public sealed class RelayClient
         using var content = new StringContent(payload, Encoding.UTF8, "application/json");
         using var response = await _http.PostAsync("api/relay/resultado", content, cancellationToken);
         response.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>
+    /// Reintenta reportar ok:true unas pocas veces (el envio ya salio, asi que jamas
+    /// se reporta ok:false desde aca). Si todos los intentos fallan, se traga el
+    /// error y sigue con el resto del lote: el lease vencera solo y el worker lo
+    /// mueve a 'revision' en vez de re-liberarlo a pendiente.
+    /// </summary>
+    private async Task ReportarResultadoConReintentosAsync(long id, string? leaseToken, CancellationToken cancellationToken)
+    {
+        const int maxIntentos = 3;
+        for (var intento = 1; intento <= maxIntentos; intento++)
+        {
+            try
+            {
+                await ReportarResultadoAsync(id, ok: true, detalle: null, leaseToken, cancellationToken);
+                return;
+            }
+            catch (Exception) when (intento < maxIntentos)
+            {
+                // Reintenta silenciosamente; el ultimo intento propaga (capturado abajo).
+            }
+            catch (Exception)
+            {
+                // Se agotaron los reintentos: se deja para que el lease expire solo.
+                return;
+            }
+        }
     }
 }
