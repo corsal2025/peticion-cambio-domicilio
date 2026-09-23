@@ -212,6 +212,80 @@ test('login con clave incorrecta responde 401', async () => {
   assert.equal(res.status, 401);
 });
 
+test('POST /api/auth/clave sin sesion responde 401', async () => {
+  const db = crearD1Fake();
+  const res = await app.request('/api/auth/clave', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actual: 'x', nueva: 'nueva1234' }),
+  }, env(db));
+  assert.equal(res.status, 401);
+});
+
+test('POST /api/auth/clave con clave actual correcta cambia la clave propia', async () => {
+  const db = crearD1Fake();
+  const e = env(db);
+  await crearUsuario(db, { usuario: 'staff1', rol: 'staff', clave: 'clave-vieja' });
+  const loginRes = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'staff1', clave: 'clave-vieja' }),
+  }, e);
+  const cookie = loginRes.headers.get('set-cookie').split(';')[0];
+
+  const res = await app.request('/api/auth/clave', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ actual: 'clave-vieja', nueva: 'clave-nueva' }),
+  }, e);
+  assert.equal(res.status, 200);
+
+  const relogin = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'staff1', clave: 'clave-nueva' }),
+  }, e);
+  assert.equal(relogin.status, 200);
+});
+
+test('POST /api/auth/clave con clave actual incorrecta responde 401 y no cambia nada', async () => {
+  const db = crearD1Fake();
+  const e = env(db);
+  await crearUsuario(db, { usuario: 'staff1', rol: 'staff', clave: 'clave-vieja' });
+  const loginRes = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'staff1', clave: 'clave-vieja' }),
+  }, e);
+  const cookie = loginRes.headers.get('set-cookie').split(';')[0];
+
+  const res = await app.request('/api/auth/clave', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ actual: 'no-es-esta', nueva: 'clave-nueva' }),
+  }, e);
+  assert.equal(res.status, 401);
+});
+
+test('POST /api/auth/clave sin clave previa (login por PIN maestro) no exige clave actual', async () => {
+  const db = crearD1Fake();
+  const e = env(db);
+  await db.prepare('INSERT INTO usuarios (usuario, nombre, rol) VALUES (?, ?, ?)').bind('staffsinclave', 'staffsinclave', 'staff').run();
+  const loginRes = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: 'staffsinclave', clave: '1234' }),
+  }, e);
+  const cookie = loginRes.headers.get('set-cookie').split(';')[0];
+
+  const res = await app.request('/api/auth/clave', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ nueva: 'clave-nueva' }),
+  }, e);
+  assert.equal(res.status, 200);
+});
+
 test('rol staff intenta configuracion (soloAdmin) responde 403', async () => {
   const db = crearD1Fake();
   const e = env(db);

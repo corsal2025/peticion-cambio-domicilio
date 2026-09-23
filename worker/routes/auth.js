@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { firmarSesion, verificarSesion, pinValido, MAX_EDAD_MS } from '../lib/auth.js';
-import { porUsuarioTodos, verificarClave, normalizarUsuario } from '../lib/usuarios.js';
+import { porUsuario, porUsuarioTodos, verificarClave, normalizarUsuario, actualizarClave } from '../lib/usuarios.js';
 import { claveIntento, estaBloqueado, estaBloqueadoGlobal, registrarFallo, limpiarFallos } from '../lib/loginRateLimit.js';
 
 const NOMBRE_COOKIE = 'peticion_sesion';
@@ -138,6 +138,43 @@ authRoutes.post('/auth/login', async (c) => {
 authRoutes.post('/auth/logout', (c) => {
   deleteCookie(c, NOMBRE_COOKIE, { path: '/' });
   c.set('sesion', null);
+  return c.json({ ok: true });
+});
+
+// Cambio de la clave propia (cualquier usuario logueado, no solo admin).
+// Llama a `obtenerSesion` a mano (igual que `soloAdmin`) en vez de depender
+// del middleware `guard`, porque esta ruta se registra en `authRoutes`, que
+// se monta ANTES de `api.use('*', guard)` en app.js.
+authRoutes.post('/auth/clave', async (c) => {
+  let sesion;
+  try {
+    sesion = await obtenerSesion(c);
+  } catch {
+    return c.json(ERROR_SECRETO, 500);
+  }
+  if (!sesion) return c.json({ error: 'Sesion requerida', login: true }, 401);
+
+  const body = await c.req.json().catch(() => ({}));
+  const { actual, nueva } = body || {};
+  if (!nueva || String(nueva).length < 4) {
+    return c.json({ error: 'Indica una clave nueva de al menos 4 caracteres.' }, 400);
+  }
+
+  const db = c.env.DB;
+  const u = await porUsuario(db, sesion.usuario);
+  if (!u) return c.json({ error: 'Usuario no encontrado.' }, 404);
+
+  // Si el usuario ya tiene clave propia, hay que confirmarla. Si todavia no
+  // tiene (login por PIN maestro sobre un usuario sin clave), se le permite
+  // fijar la primera sin pedirle una clave anterior que nunca existio.
+  if (u.hash) {
+    if (!actual) return c.json({ error: 'Indica tu clave actual.' }, 400);
+    if (!(await verificarClave(actual, u.hash, u.salt))) {
+      return c.json({ error: 'La clave actual es incorrecta.' }, 401);
+    }
+  }
+
+  await actualizarClave(db, u.id, nueva);
   return c.json({ ok: true });
 });
 

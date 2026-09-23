@@ -23,7 +23,10 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Clave / PIN</label>
-            <input type="password" name="clave" class="form-control" required />
+            <div class="input-group">
+              <input type="password" name="clave" id="clave-login" class="form-control" required autocomplete="current-password" />
+              <button type="button" id="btn-toggle-clave-login" class="btn btn-outline-secondary btn-toggle-clave"></button>
+            </div>
           </div>
           <div id="error-login" class="alert alert-danger py-2" style="display:none;font-size:.82rem;"></div>
           <button type="submit" class="btn btn-primary w-100">Ingresar</button>
@@ -32,8 +35,11 @@
     </div>
   </div>
   <script type="module">
+    import { montarToggleClave } from '/js/passwordToggle.js';
+
     const form = document.getElementById('form-login');
     const error = document.getElementById('error-login');
+    montarToggleClave(document.getElementById('clave-login'), document.getElementById('btn-toggle-clave-login'));
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       error.style.display = 'none';

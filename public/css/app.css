@@ -365,3 +365,9 @@ code {
 .cuadro.s-idle { background: var(--line-strong); }
 
 pre { font-size: .82rem; }
+
+/* ---------- Boton mostrar/ocultar clave (👁) ---------- */
+.btn-toggle-clave {
+  line-height: 1;
+  padding: .3rem .55rem !important;
+}
