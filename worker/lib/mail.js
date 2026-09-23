@@ -8,12 +8,16 @@ import { agruparPorComuna, construirCorreo } from './plantilla.js';
 import { enviarEws } from './ews.js';
 import { marcarComoEnviada } from './peticiones.js';
 import { registrarPeticionesEnvio, peticionesDelEnvio } from './envioPeticiones.js';
+import { fold } from './normalizar.js';
 
 /**
  * Arma los correos a enviar (uno por comuna) a partir de las peticiones
  * marcadas y pendientes (ya filtradas por el llamador). No toca la base.
  * @param {Array} peticionesPendientes filas de la tabla `peticiones`
  * @param {{correoDestino?: (comuna:string)=>string|null, correosPorComuna?: Record<string,string>, testEmail?: string}} opciones
+ *   correosPorComuna debe venir con clave normalizada (fold(nombre)), asi
+ *   "Viña del Mar" (comuna escrita a mano) matchea "VINA DEL MAR" (comuna
+ *   registrada en el directorio), sin depender de mayusculas/tildes exactas.
  */
 export function prepararEnvios(peticionesPendientes, opciones = {}) {
   const grupos = agruparPorComuna(
@@ -30,7 +34,7 @@ export function prepararEnvios(peticionesPendientes, opciones = {}) {
 
   return grupos.map(({ comuna, peticiones }) => {
     const { asunto, cuerpo } = construirCorreo(peticiones, opciones.firmaCorreo ?? '');
-    let para = opciones.correoDestino ?? (opciones.correosPorComuna ? opciones.correosPorComuna[comuna] : null);
+    let para = opciones.correoDestino ?? (opciones.correosPorComuna ? opciones.correosPorComuna[fold(comuna)] : null);
     if (testEmail) {
       para = testEmail;
     }

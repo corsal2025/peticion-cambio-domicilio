@@ -85,7 +85,7 @@ peticionesRoutes.post('/peticiones/enviar', async (c) => {
   const testEmail = await obtenerConfig(db, 'mail.test_email');
 
   const envios = prepararEnvios(pendientes, {
-    correosPorComuna: Object.fromEntries(comunas.map((cc) => [cc.nombre, cc.correos])),
+    correosPorComuna: correoPorComunaNorm,
     testEmail,
   });
 
@@ -96,7 +96,6 @@ peticionesRoutes.post('/peticiones/enviar', async (c) => {
       await db.prepare("UPDATE peticiones SET estado = 'SinCorreoComuna' WHERE id = ?").bind(id).run();
     }
   }
-  void correoPorComunaNorm; // reservado para resolver por nombre normalizado si hace falta
 
   await encolarEnvios(db, conCorreo);
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { crearD1Fake } from './support/d1Fake.js';
 import { upsertPeticion, listarPeticiones, marcarPeticion } from '../worker/lib/peticiones.js';
 import { prepararEnvios, encolarEnvios, enviarDirecto } from '../worker/lib/mail.js';
+import { fold } from '../worker/lib/normalizar.js';
 
 async function crearPeticionMarcada(db, datos) {
   const { id } = await upsertPeticion(db, datos);
@@ -23,6 +24,22 @@ test('prepararEnvios agrupa por comuna y arma asunto/cuerpo', async () => {
   assert.match(envios[0].cuerpo, /Juan Perez/);
   assert.match(envios[0].cuerpo, /Ana Soto/);
   assert.deepEqual(envios[0].peticionIds.sort(), [1, 2]);
+});
+
+test('prepararEnvios matchea la comuna via correosPorComuna normalizado (fold), no exacto', async () => {
+  const db = crearD1Fake();
+  await crearPeticionMarcada(db, { nombreCompleto: 'Juan Perez', rut: '11.111.111-1', comuna: 'Viña del Mar' });
+  const pendientes = (await listarPeticiones(db)).filter((p) => p.marcada && !p.enviada_en);
+
+  // correosPorComuna llega con clave normalizada (fold), como la construye el
+  // caller (worker/routes/peticiones.js) a partir de comunas.lib fold(nombre).
+  const envios = prepararEnvios(pendientes, {
+    correosPorComuna: { [fold('VINA DEL MAR')]: 'vina@muni.cl' },
+    testEmail: '',
+  });
+
+  assert.equal(envios.length, 1);
+  assert.equal(envios[0].para, 'vina@muni.cl');
 });
 
 test('prepararEnvios reemplaza destinatario cuando hay testEmail configurado', async () => {
