@@ -21,8 +21,8 @@ relayRoutes.get('/relay/pendientes', async (c) => {
 relayRoutes.post('/relay/resultado', async (c) => {
   if (!autenticado(c)) return c.json({ error: 'Secreto de relay invalido' }, 401);
   const body = await c.req.json().catch(() => ({}));
-  const { id, ok, detalle } = body || {};
+  const { id, ok, detalle, leaseToken } = body || {};
   if (!id) return c.json({ error: 'Falta id' }, 400);
-  const resultado = await reportarResultado(c.env.DB, Number(id), Boolean(ok), detalle);
+  const resultado = await reportarResultado(c.env.DB, Number(id), Boolean(ok), detalle, leaseToken);
   return c.json(resultado);
 });

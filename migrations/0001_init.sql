@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS envios (
                    CHECK (estado IN ('pendiente','tomado','enviado','error')),
   intentos       INTEGER NOT NULL DEFAULT 0,
   tomado_en      TEXT,
+  lease_token    TEXT,
   resultado      TEXT,
   creado_en      TEXT NOT NULL DEFAULT (datetime('now')),
   enviado_en     TEXT

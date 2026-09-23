@@ -7,6 +7,7 @@
 import { agruparPorComuna, construirCorreo } from './plantilla.js';
 import { enviarEws } from './ews.js';
 import { marcarComoEnviada } from './peticiones.js';
+import { registrarPeticionesEnvio, peticionesDelEnvio } from './envioPeticiones.js';
 
 /**
  * Arma los correos a enviar (uno por comuna) a partir de las peticiones
@@ -53,22 +54,9 @@ export async function encolarEnvios(db, envios) {
     }
 
     envio.envioId = result.meta.last_row_id;
+    await registrarPeticionesEnvio(db, envio.envioId, envio.peticionIds);
   }
   return envios;
-}
-
-/** Busca las peticiones que quedaron encoladas para un mismo envio (mismo para/asunto/cuerpo, EnCola). */
-async function peticionesDelEnvio(db, envio) {
-  // El envio guarda solo peticion_id (representante) por simplicidad de esquema;
-  // como el cuerpo agrupa varias peticiones por comuna, se resuelven todas las
-  // que compartan comuna y esten EnCola en el momento del envio.
-  const representante = await db.prepare('SELECT comuna FROM peticiones WHERE id = ?').bind(envio.peticion_id).first();
-  if (!representante) return [envio.peticion_id];
-  const { results } = await db
-    .prepare("SELECT id FROM peticiones WHERE comuna = ? AND estado = 'EnCola'")
-    .bind(representante.comuna)
-    .all();
-  return results.length ? results.map((r) => r.id) : [envio.peticion_id];
 }
 
 /** Envia un `envio` (fila de la tabla) por EWS directo y refleja el resultado en D1. */

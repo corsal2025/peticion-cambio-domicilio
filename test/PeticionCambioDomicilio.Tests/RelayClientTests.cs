@@ -53,8 +53,8 @@ public class RelayClientTests
     {
         var pendientes = new[]
         {
-            new { id = 1, para = "a@x.cl", asunto = "Asunto 1", cuerpo_html = "Cuerpo 1" },
-            new { id = 2, para = "b@x.cl", asunto = "Asunto 2", cuerpo_html = "Cuerpo 2" },
+            new { id = 1, para = "a@x.cl", asunto = "Asunto 1", cuerpo_html = "Cuerpo 1", lease_token = "lease-1" },
+            new { id = 2, para = "b@x.cl", asunto = "Asunto 2", cuerpo_html = "Cuerpo 2", lease_token = "lease-2" },
         };
         var resultadosReportados = new List<JsonElement>();
 
@@ -88,6 +88,8 @@ public class RelayClientTests
         Assert.Equal(2, mailSender.Enviados.Count);
         Assert.Equal(2, resultadosReportados.Count);
         Assert.All(resultadosReportados, r => Assert.True(r.GetProperty("ok").GetBoolean()));
+        Assert.Contains(resultadosReportados, r => r.GetProperty("leaseToken").GetString() == "lease-1");
+        Assert.Contains(resultadosReportados, r => r.GetProperty("leaseToken").GetString() == "lease-2");
     }
 
     [Fact]
