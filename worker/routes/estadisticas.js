@@ -1,26 +1,23 @@
-// Metricas agregadas: conteo por estado, por comuna, vencidas vs en plazo.
+// Estadisticas: como responden las comunas. Port 1:1 de
+// PeticionCambioDomicilio.Pages.EstadisticasModel (C#) — mismos totales,
+// mismo ranking de volumen y misma tabla "por comuna" (demora habil desde el
+// envio del correo hasta que la carpeta figura como subida en el Excel /
+// dashboard, columna ESTADO DE LA CARPETA).
+//
+// Presupuesto D1: UN solo SELECT (constante, no depende del volumen de
+// filas); toda la agregacion se hace en JS (worker/lib/estadisticasCalc.js),
+// igual que el LINQ in-memory del .NET original.
 import { Hono } from 'hono';
-import { listarPeticiones } from '../lib/peticiones.js';
-import { plazoInfo } from '../lib/plazos.js';
+import { calcularEstadisticas } from '../lib/estadisticasCalc.js';
 
 export const estadisticasRoutes = new Hono();
 
 estadisticasRoutes.get('/estadisticas', async (c) => {
-  const filas = await listarPeticiones(c.env.DB);
+  const { results } = await c.env.DB.prepare(
+    `SELECT comuna, enviada_en, subida_en, estado_carpeta
+       FROM peticiones
+      WHERE estado = 'Enviada' AND enviada_en IS NOT NULL`,
+  ).all();
 
-  const porEstado = {};
-  const porComuna = {};
-  let vencidas = 0;
-  let enPlazo = 0;
-
-  for (const p of filas) {
-    porEstado[p.estado] = (porEstado[p.estado] || 0) + 1;
-    porComuna[p.comuna] = (porComuna[p.comuna] || 0) + 1;
-    const { vencido } = plazoInfo({ enviadaEn: p.enviada_en });
-    if (p.enviada_en) {
-      vencido ? vencidas++ : enPlazo++;
-    }
-  }
-
-  return c.json({ total: filas.length, porEstado, porComuna, vencidas, enPlazo });
+  return c.json(calcularEstadisticas(results));
 });

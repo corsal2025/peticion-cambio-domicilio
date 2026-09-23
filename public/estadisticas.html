@@ -22,16 +22,73 @@
     </div>
   </nav>
   <main class="container">
-    <h1 class="h4 mb-3">Estadísticas</h1>
-    <div class="stat-row mb-4">
-      <div class="stat-chip"><b class="num" id="s-total">0</b><span>Total</span></div>
-      <div class="stat-chip stat-chip--ok"><b class="num" id="s-enplazo">0</b><span>En plazo</span></div>
-      <div class="stat-chip stat-chip--bad"><b class="num" id="s-vencidas">0</b><span>Vencidas</span></div>
+    <div class="mb-3">
+      <h1 class="h3 mb-1">Estadísticas</h1>
+      <div class="text-muted" style="font-size:.8rem;">
+        Cómo responden las comunas · la demora se mide desde el envío del correo hasta que la
+        carpeta figura como subida en el Excel (columna <code>ESTADO DE LA CARPETA</code>).
+      </div>
     </div>
-    <h2 class="h6">Por estado</h2>
-    <ul id="lista-estado" class="mb-4"></ul>
-    <h2 class="h6">Por comuna</h2>
-    <ul id="lista-comuna"></ul>
+
+    <div id="sin-datos" class="alert alert-info d-none">
+      Todavía no hay peticiones enviadas. La estadística aparece cuando empieces a enviar correos.
+    </div>
+
+    <div id="contenido" class="d-none">
+      <div class="stat-row mb-3">
+        <div class="stat-chip"><b class="num" id="s-total">0</b><span>Carpetas pedidas</span></div>
+        <div class="stat-chip stat-chip--soft"><b class="num" id="s-comunas">0</b><span>Comunas</span></div>
+        <div class="stat-chip stat-chip--ok"><b class="num" id="s-enplazo">—</b><span>Dentro de plazo</span></div>
+        <div class="stat-chip"><b class="num" id="s-demora">—</b><span>Demora promedio</span></div>
+        <div class="stat-chip stat-chip--bad"><b class="num" id="s-nosotros">0</b><span>Subimos nosotros</span></div>
+        <div class="stat-chip stat-chip--soft"><b class="num" id="s-abiertas">0</b><span>Sin cerrar</span></div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-lg-6">
+          <div class="card h-100">
+            <div class="card-body">
+              <h2 class="h6 mb-1">Comunas con más cambios de domicilio</h2>
+              <p class="text-muted mb-3" style="font-size:.78rem;">Carpetas pedidas (enviadas)</p>
+              <div id="ranking-volumen"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card h-100">
+            <div class="card-body">
+              <h2 class="h6 mb-1">Quién sube la carpeta a CONASET</h2>
+              <p class="text-muted mb-3" style="font-size:.78rem;">
+                De <span id="s-cerradas">0</span> carpeta(s) ya cerrada(s)
+              </p>
+              <div id="split-subida"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead>
+            <tr>
+              <th class="text-start">Comuna</th>
+              <th>Solicitadas</th>
+              <th>Subió comuna</th>
+              <th>Subimos nosotros</th>
+              <th>Demora prom.</th>
+              <th style="width:170px">% en plazo</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-comunas"></tbody>
+        </table>
+      </div>
+
+      <p class="text-muted mt-2" style="font-size:.78rem;">
+        Solo cuenta carpetas cerradas <strong>después</strong> de que empezó a registrarse la fecha de subida.
+        "La subió la comuna" = <code>SUBIDA A CONASET</code>. "La subimos nosotros" =
+        <code>SUBIDA CON F8 / OFICIO / CORREO</code>.
+      </p>
+    </div>
   </main>
   <script type="module" src="/js/estadisticas.js"></script>
 </body>

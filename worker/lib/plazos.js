@@ -35,7 +35,7 @@ const FORMATO_FECHA_SANTIAGO = new Intl.DateTimeFormat('en-CA', {
  * de verano). Truncar el ISO en UTC directamente adelanta el inicio del
  * plazo un dia entero cerca de la medianoche chilena.
  */
-function fechaLocalSantiago(date) {
+export function fechaLocalSantiago(date) {
   return FORMATO_FECHA_SANTIAGO.format(date);
 }
 

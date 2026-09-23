@@ -85,12 +85,13 @@ test('GET /api/usuarios solo admin, alta de usuario', async () => {
   assert.equal(lista.length, 1);
 });
 
-test('GET /api/estadisticas cuenta vencidas y en plazo', async () => {
+test('GET /api/estadisticas sin peticiones enviadas responde todo en cero', async () => {
   const db = crearD1Fake();
   const e = env(db);
   const headers = { Cookie: await cookieAdmin(e) };
   const res = await app.request('/api/estadisticas', { headers }, e);
   const stats = await res.json();
-  assert.equal(stats.total, 0);
-  assert.equal(stats.vencidas, 0);
+  assert.equal(stats.totalEnviadas, 0);
+  assert.equal(stats.abiertas, 0);
+  assert.deepEqual(stats.porComuna, []);
 });
