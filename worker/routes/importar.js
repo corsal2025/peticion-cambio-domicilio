@@ -37,7 +37,8 @@ importarRoutes.post('/import', async (c) => {
       .run();
     return c.json({ ok: true, ...resumen });
   } catch (err) {
-    return c.json({ error: err.message }, 400);
+    const esRechazoPorVolumen = /Lote rechazado/i.test(err.message);
+    return c.json({ error: err.message }, esRechazoPorVolumen ? 422 : 400);
   }
 });
 

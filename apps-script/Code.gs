@@ -542,6 +542,7 @@ function extraerFilas_(libro) {
         ordenImportacion: filas.length + 1,
         rutInvalido: !rutNormalizado,
         estadoCarpeta: estadoCrudo,
+        esCambioDomicilio: esCambioDomicilio_(estadoCrudo),
         fechaSubidaCarpeta: fechaSubida,
       });
     }
@@ -601,10 +602,20 @@ var ESTADOS_FINALIZADOS = [
 
 function rangoEstadoCarpeta_(estadoCrudo) {
   var f = fold_(estadoCrudo);
-  if (f === '' || f === fold_(CONFIG.ESTADO_CAMBIO_DOMICILIO)) return 1;
+  // IMPORTANTE: una celda de "estado" vacia NO es "CAMBIO DE DOMICILIO". El
+  // Excel real tiene miles de filas con estado vacio que no pertenecen al
+  // flujo (ver incidente 2026-09: 17k Borrador creadas de un sync con ~5
+  // filas reales, la mayoria por celdas vacias tratadas como rango 1).
+  if (f === '') return 0;
+  if (f === fold_(CONFIG.ESTADO_CAMBIO_DOMICILIO)) return 1;
   if (f === fold_('CAMBIO DE DOMICILIO SOLICITADO')) return 2;
   if (ESTADOS_FINALIZADOS.indexOf(f) !== -1) return 3;
   return 0;
+}
+
+/** true solo si el estado crudo es EXACTAMENTE "CAMBIO DE DOMICILIO" (fold). Vacio NO cuenta. */
+function esCambioDomicilio_(estadoCrudo) {
+  return fold_(estadoCrudo) === fold_(CONFIG.ESTADO_CAMBIO_DOMICILIO);
 }
 
 // --------------------------------------------------------------------------

@@ -11,7 +11,7 @@ function env(db) {
 }
 
 async function conEnvioPendiente(db) {
-  await importarFilas(db, [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso' }]);
+  await importarFilas(db, [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso', estadoCarpeta: 'CAMBIO DE DOMICILIO' }]);
   const peticion = await db.prepare('SELECT * FROM peticiones LIMIT 1').first();
   await marcarPeticion(db, peticion.id, true);
   await encolarEnvios(db, [{ para: 'valpo@muni.cl', asunto: 'S', cuerpo: 'C', peticionIds: [peticion.id] }]);
@@ -27,7 +27,7 @@ test('GET /api/relay/pendientes con limit por encima de 50 se acota a 50', async
   const db = crearD1Fake();
   for (let i = 0; i < 60; i++) {
     const rut = String(10000000 + i);
-    await importarFilas(db, [{ nombreCompleto: `Persona ${i}`, rut: `${rut}-${i % 10}`, comuna: `Comuna${i}` }]);
+    await importarFilas(db, [{ nombreCompleto: `Persona ${i}`, rut: `${rut}-${i % 10}`, comuna: `Comuna${i}`, estadoCarpeta: 'CAMBIO DE DOMICILIO' }]);
   }
   const { results } = await db.prepare("SELECT id FROM peticiones").all();
   for (const p of results) await marcarPeticion(db, p.id, true);

@@ -28,7 +28,7 @@ test('POST /api/import sin secreto responde 401 y no procesa nada', async () => 
   const res = await app.request('/api/import', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filas: [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso' }] }),
+    body: JSON.stringify({ filas: [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso', estadoCarpeta: 'CAMBIO DE DOMICILIO' }] }),
   }, env(db));
   assert.equal(res.status, 401);
   const { results } = await db.prepare('SELECT * FROM peticiones').all();
@@ -37,7 +37,7 @@ test('POST /api/import sin secreto responde 401 y no procesa nada', async () => 
 
 test('POST /api/import con secreto valido hace upsert (sin syncId nunca borra por si solo)', async () => {
   const db = crearD1Fake();
-  const res = await postImport(db, { filas: [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso' }] });
+  const res = await postImport(db, { filas: [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso', estadoCarpeta: 'CAMBIO DE DOMICILIO' }] });
   assert.equal(res.status, 200);
   const resumen = await res.json();
   assert.equal(resumen.insertadas, 1);
@@ -46,7 +46,7 @@ test('POST /api/import con secreto valido hace upsert (sin syncId nunca borra po
 
 test('POST /api/import/finalizar con syncId desconocido responde 409 y no borra', async () => {
   const db = crearD1Fake();
-  await postImport(db, { filas: [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso' }] });
+  await postImport(db, { filas: [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso', estadoCarpeta: 'CAMBIO DE DOMICILIO' }] });
 
   const res = await postFinalizar(db, { syncId: 'no-existe' });
   assert.equal(res.status, 409);
@@ -58,7 +58,7 @@ test('POST /api/import/finalizar con syncId desconocido responde 409 y no borra'
 test('POST /api/import/finalizar con filas vacias no borra el Borrador existente y avisa', async () => {
   const db = crearD1Fake();
   await postImport(db, {
-    filas: [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso' }],
+    filas: [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso', estadoCarpeta: 'CAMBIO DE DOMICILIO' }],
     syncId: 's1',
     lote: 1,
     totalLotes: 1,
@@ -78,7 +78,7 @@ test('POST /api/import/finalizar con filas vacias no borra el Borrador existente
 test('POST /api/import/finalizar rechaza si faltan lotes por llegar', async () => {
   const db = crearD1Fake();
   await postImport(db, {
-    filas: [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso' }],
+    filas: [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso', estadoCarpeta: 'CAMBIO DE DOMICILIO' }],
     syncId: 's3',
     lote: 1,
     totalLotes: 2,
@@ -100,10 +100,10 @@ test('sincronizacion en 2 lotes: finalizar limpia obsoletas usando el acumulado 
     lote: 1,
     totalLotes: 1,
     filas: [
-      { nombreCompleto: 'A', rut: '18785387-7', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA' },
-      { nombreCompleto: 'B', rut: '7654321-6', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA' },
-      { nombreCompleto: 'C', rut: '9876543-3', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA' },
-      { nombreCompleto: 'D', rut: '11111111-1', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA' },
+      { nombreCompleto: 'A', rut: '18785387-7', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
+      { nombreCompleto: 'B', rut: '7654321-6', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
+      { nombreCompleto: 'C', rut: '9876543-3', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
+      { nombreCompleto: 'D', rut: '11111111-1', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
     ],
   });
   await postFinalizar(db, { syncId: 'inicial' });
@@ -115,8 +115,8 @@ test('sincronizacion en 2 lotes: finalizar limpia obsoletas usando el acumulado 
     totalLotes: 2,
     hojasLeidas: 3,
     filas: [
-      { nombreCompleto: 'A', rut: '18785387-7', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA' },
-      { nombreCompleto: 'B', rut: '7654321-6', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA' },
+      { nombreCompleto: 'A', rut: '18785387-7', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
+      { nombreCompleto: 'B', rut: '7654321-6', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
     ],
   });
   await postImport(db, {
@@ -125,8 +125,8 @@ test('sincronizacion en 2 lotes: finalizar limpia obsoletas usando el acumulado 
     totalLotes: 2,
     hojasLeidas: 3,
     filas: [
-      { nombreCompleto: 'C', rut: '9876543-3', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA' },
-      { nombreCompleto: 'D', rut: '11111111-1', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA' },
+      { nombreCompleto: 'C', rut: '9876543-3', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
+      { nombreCompleto: 'D', rut: '11111111-1', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
     ],
   });
 

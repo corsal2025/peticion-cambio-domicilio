@@ -236,3 +236,74 @@ test('finalizar con syncId desconocido rechaza', async () => {
   const db = crearD1Fake();
   await assert.rejects(() => finalizarImport(db, { syncId: 'no-existe' }), /desconocido/i);
 });
+
+// --- Incidente 2026-09: sync real creo 17234 Borrador (esperaba ~5). Causa:
+// filas con estado vacio (normalizar('') === 'CAMBIO DE DOMICILIO') y filas
+// en etapas posteriores (SUBIDA A CONASET, etc.) sin peticion existente se
+// upserteaban como altas nuevas. Paridad con ExcelPeticionImporter.cs
+// ImportCore: esCambioDomicilio = fold exacto contra "CAMBIO DE DOMICILIO"
+// (vacio NO cuenta); solo esas filas crean/actualizan libremente. El resto
+// (rango>=2, no exacto) SOLO puede avanzar el estado_carpeta de una peticion
+// YA EXISTENTE con la misma clave (rut|comuna); nunca crea. Rango<2 y no
+// exacto se descarta sin tocar nada.
+
+test('fila con estado vacio NUNCA crea una peticion (paridad ExcelPeticionImporter)', async () => {
+  const db = crearD1Fake();
+  await importarUnLote(db, [fila({ estadoCarpeta: '' })]);
+
+  const lista = await listarPeticiones(db, {});
+  assert.equal(lista.length, 0, 'una celda de estado vacia no es CAMBIO DE DOMICILIO, no debe crear nada');
+});
+
+test('fila SUBIDA A CONASET sin peticion existente NUNCA crea una peticion', async () => {
+  const db = crearD1Fake();
+  await importarUnLote(db, [fila({ estadoCarpeta: 'SUBIDA A CONASET' })]);
+
+  const lista = await listarPeticiones(db, {});
+  assert.equal(lista.length, 0, 'una fila en etapa posterior sin peticion existente no debe crear nada');
+});
+
+test('fila SUBIDA A CONASET con peticion existente avanza estado_carpeta y subida_en, sin crear otra fila', async () => {
+  const db = crearD1Fake();
+  // Primero llega la fila real de "CAMBIO DE DOMICILIO" que crea la peticion.
+  await importarUnLote(db, [
+    fila({ rut: '18.785.387-7', comuna: 'VALPARAISO', estadoCarpeta: 'CAMBIO DE DOMICILIO' }),
+  ]);
+  const antes = await listarPeticiones(db, {});
+  assert.equal(antes.length, 1);
+  assert.equal(antes[0].subidaEn ?? antes[0].subida_en ?? null, null);
+
+  // Sincronizacion posterior: la misma persona/comuna ya fue subida a CONASET.
+  await importarUnLote(db, [
+    fila({ rut: '18.785.387-7', comuna: 'VALPARAISO', estadoCarpeta: 'SUBIDA A CONASET' }),
+  ]);
+
+  const despues = await listarPeticiones(db, {});
+  assert.equal(despues.length, 1, 'no debe crear una segunda fila, solo avanza la existente');
+  assert.equal(despues[0].estadoCarpeta ?? despues[0].estado_carpeta, 'SUBIDA A CONASET');
+  assert.ok(despues[0].subidaEn ?? despues[0].subida_en, 'subida_en debe quedar seteada al alcanzar rango 3');
+});
+
+test('fila con estado exacto CAMBIO DE DOMICILIO SI crea/refresca la peticion', async () => {
+  const db = crearD1Fake();
+  const r = await importarUnLote(db, [fila({ estadoCarpeta: 'CAMBIO DE DOMICILIO' })]);
+
+  const lista = await listarPeticiones(db, {});
+  assert.equal(lista.length, 1);
+  assert.equal(r.insertadas, 1);
+});
+
+test('un lote que insertaria mas de 200 peticiones nuevas es rechazado (guardia de seguridad)', async () => {
+  const db = crearD1Fake();
+  const filas = Array.from({ length: 201 }, (_, i) =>
+    fila({ rut: `1${i}-9`, comuna: `COMUNA${i}`, estadoCarpeta: 'CAMBIO DE DOMICILIO' }),
+  );
+
+  await assert.rejects(
+    () => importarFilas(db, filas, { syncId: 'lote-masivo', lote: 1, totalLotes: 1 }),
+    /200|masiv/i,
+  );
+
+  const lista = await listarPeticiones(db, {});
+  assert.equal(lista.length, 0, 'el rechazo no debe dejar altas parciales');
+});

@@ -86,10 +86,20 @@ test('POST /api/import/finalizar con miles de filas ya existentes usa pocos D1 c
   const db = crearD1Fake();
 
   // Primera sincronizacion completa: deja ~3000 peticiones Borrador vigentes.
+  // Repartida en lotes de 200 (paridad con MAX_FILAS_POR_LOTE de Apps
+  // Script y con el limite de seguridad de altas nuevas por lote, ver
+  // MAX_ALTAS_POR_LOTE en worker/lib/importar.js).
+  const TAM_LOTE = 200;
   const filasIniciales = Array.from({ length: 3000 }, (_, i) => fila(i));
-  for (let offset = 0; offset < filasIniciales.length; offset += 500) {
-    const lote = filasIniciales.slice(offset, offset + 500);
-    await postImport(db, { filas: lote, syncId: 'inicial', lote: offset / 500 + 1, totalLotes: 6 });
+  for (let offset = 0; offset < filasIniciales.length; offset += TAM_LOTE) {
+    const lote = filasIniciales.slice(offset, offset + TAM_LOTE);
+    const res = await postImport(db, {
+      filas: lote,
+      syncId: 'inicial',
+      lote: offset / TAM_LOTE + 1,
+      totalLotes: Math.ceil(filasIniciales.length / TAM_LOTE),
+    });
+    assert.equal(res.status, 200);
   }
   await postFinalizar(db, { syncId: 'inicial' });
 
@@ -125,9 +135,16 @@ test('POST /api/comunas/sync con 300 contactos usa pocos D1 calls/statements', a
 test('importarFilas con un lote grande (JSON > 90KB) sigue usando pocos D1 calls', async () => {
   const db = crearD1Fake();
   // Filas "pesadas" para forzar que el JSON del lote supere holgadamente 90KB
-  // y dispare el chunking interno por tamano.
+  // y dispare el chunking interno por tamano. Estado en etapa posterior (no
+  // "CAMBIO DE DOMICILIO" exacto) a proposito: este test mide el costo de
+  // chunking de UPDATE_AVANCE_SQL sobre un lote grande sin pisar la guardia
+  // de altas nuevas (MAX_ALTAS_POR_LOTE), que en la realidad nunca aplicaria
+  // a miles de filas de una vez.
   const filas = Array.from({ length: 2000 }, (_, i) =>
-    fila(i, { nombreCompleto: `Persona con nombre bastante largo numero ${i} `.repeat(3) }),
+    fila(i, {
+      nombreCompleto: `Persona con nombre bastante largo numero ${i} `.repeat(3),
+      estadoCarpeta: 'SUBIDA A CONASET',
+    }),
   );
 
   db.resetStats();

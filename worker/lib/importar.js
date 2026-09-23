@@ -31,7 +31,7 @@
 // (partidos en varios chunks solo si el JSON supera ~90KB, el limite de
 // tamano de un parametro bindeado en D1). Ver worker/lib/jsonChunk.js.
 import { fold } from './normalizar.js';
-import { normalizar as normalizarEstado, rangoSql } from './estadoCarpeta.js';
+import { normalizar as normalizarEstado, rango, rangoSql, CAMBIO_DE_DOMICILIO } from './estadoCarpeta.js';
 import { chunkPorTamano } from './jsonChunk.js';
 import { batch } from './db.js';
 
@@ -41,6 +41,14 @@ const MAX_FILAS = 5000;
 // payload de import incompleto (hoja no leida, error de red, etc.), no de que
 // realmente hayan desaparecido tantas filas del Excel de una sola vez.
 const UMBRAL_BORRADO_MASIVO = 0.5;
+
+// Guardia de seguridad: un sync legitimo trae, a lo sumo, un punado de altas
+// nuevas por dia (personas que recien entran al flujo de cambio de domicilio).
+// Si UN solo lote insertaria mas que esto, casi seguro es un bug de
+// clasificacion aguas arriba (ver incidente 2026-09: 17234 Borrador creadas de
+// un sync que debia crear ~5) y se rechaza entero, sin insertar nada, para
+// que el operador revise antes de reintentar.
+const MAX_ALTAS_POR_LOTE = 200;
 
 const RANGO_ACTUAL_SQL = rangoSql('peticiones.estado_carpeta');
 
@@ -54,10 +62,28 @@ function claveDeFila(fila) {
   return `${rutNorm(fila.rut)}|${fold(fila.comuna)}`;
 }
 
-/** Prepara una fila cruda del Excel/Apps Script para viajar dentro del JSON del upsert masivo. */
+/**
+ * Rango del estado crudo SIN el fallback de `normalizar('') === 'CAMBIO DE
+ * DOMICILIO'` (ese fallback existe para otros usos del catalogo, pero aqui
+ * una celda vacia debe valer rango 0, nunca 1 — ver incidente 2026-09).
+ */
+function rangoDesdeCrudo(estadoCrudo) {
+  if (fold(estadoCrudo) === '') return 0;
+  return rango(estadoCrudo);
+}
+
+/**
+ * Prepara una fila cruda del Excel/Apps Script para viajar dentro del JSON
+ * del upsert masivo. NUNCA confia en flags que pudiera mandar el cliente
+ * (Apps Script): `es_cd` y `rango` se recalculan aqui desde el estado crudo,
+ * en paridad con ExcelPeticionImporter.cs ImportCore (esCambioDomicilio =
+ * fold exacto contra "CAMBIO DE DOMICILIO"; vacio NO cuenta).
+ */
 function prepararFila(fila) {
   const rn = rutNorm(fila.rut);
   const cn = fold(fila.comuna);
+  const estadoCrudo = fila.estadoCarpeta;
+  const esCambioDomicilio = fold(estadoCrudo) === fold(CAMBIO_DE_DOMICILIO);
   return {
     rut_norm: rn,
     comuna_norm: cn,
@@ -71,7 +97,10 @@ function prepararFila(fila) {
     origen: fila.origen ?? null,
     orden_importacion: fila.ordenImportacion ?? 0,
     rut_invalido: fila.rutInvalido ? 1 : 0,
-    estado_carpeta: normalizarEstado(fila.estadoCarpeta),
+    estado_carpeta: normalizarEstado(estadoCrudo),
+    fecha_subida_carpeta: fila.fechaSubidaCarpeta ?? null,
+    es_cd: esCambioDomicilio ? 1 : 0,
+    rango: esCambioDomicilio ? 1 : rangoDesdeCrudo(estadoCrudo),
   };
 }
 
@@ -111,6 +140,32 @@ const UPSERT_SQL = `
       THEN excluded.estado_carpeta ELSE peticiones.estado_carpeta END
 `;
 
+// Filas que NO son "CAMBIO DE DOMICILIO" exacto (es_cd = 0) pero traen rango
+// >= 2 (ya solicitadas a la comuna o subidas a CONASET/F8/oficio/correo):
+// paridad con ExcelPeticionImporter.cs ImportCore, estas filas SOLO pueden
+// avanzar el estado_carpeta (y setear subida_en al llegar a rango 3) de una
+// peticion YA EXISTENTE con la misma clave (rut_norm, comuna_norm). Nunca
+// insertan: si no hay match, el UPDATE simplemente no toca ninguna fila.
+const UPDATE_AVANCE_SQL = `
+  UPDATE peticiones SET
+    estado_carpeta = CASE
+      WHEN ${rangoSql('t.estado_carpeta')} > ${RANGO_ACTUAL_SQL}
+      THEN t.estado_carpeta ELSE peticiones.estado_carpeta END,
+    subida_en = CASE
+      WHEN ${rangoSql('t.estado_carpeta')} >= 3 AND ${rangoSql('t.estado_carpeta')} > ${RANGO_ACTUAL_SQL}
+      THEN COALESCE(peticiones.subida_en, COALESCE(t.fecha_subida_carpeta, date('now')))
+      ELSE peticiones.subida_en END
+  FROM (
+    SELECT
+      json_each.value ->> 'rut_norm' AS rut_norm,
+      json_each.value ->> 'comuna_norm' AS comuna_norm,
+      json_each.value ->> 'estado_carpeta' AS estado_carpeta,
+      json_each.value ->> 'fecha_subida_carpeta' AS fecha_subida_carpeta
+    FROM json_each(?)
+  ) AS t
+  WHERE peticiones.rut_norm = t.rut_norm AND peticiones.comuna_norm = t.comuna_norm
+`;
+
 /**
  * Procesa UN lote del import: upsert idempotente de sus filas, set-based
  * (una consulta por chunk de tamano, nunca una consulta por fila). No
@@ -141,13 +196,37 @@ export async function importarFilas(db, filas, opciones = {}) {
   // "el ultimo que escribe gana").
   const porClave = new Map();
   for (const p of preparadas) porClave.set(p.clave, p);
-  const clavesVistas = [...porClave.keys()];
+
+  // Paridad con ExcelPeticionImporter.cs ImportCore:
+  //  - es_cd = 1 (estado crudo EXACTAMENTE "CAMBIO DE DOMICILIO"): upsert
+  //    libre (crea o refresca), via UPSERT_SQL.
+  //  - es_cd = 0 && rango >= 2: SOLO puede avanzar una peticion YA EXISTENTE
+  //    con la misma clave; nunca crea. Via UPDATE_AVANCE_SQL.
+  //  - es_cd = 0 && rango < 2: fuera del flujo, se descarta sin tocar nada
+  //    (ni upsert, ni update, ni vistas).
+  const filasCD = [];
+  const filasAvance = [];
+  for (const p of porClave.values()) {
+    if (p.es_cd) {
+      filasCD.push(p);
+    } else if (p.rango >= 2) {
+      filasAvance.push(p);
+    }
+  }
+
+  // Claves que cuentan como "vigentes" para la limpieza de obsoletas de
+  // finalizarImport: las CD (pueden crear) y las de avance (aunque solo
+  // actualicen una existente). Registrar tambien las de avance es la opcion
+  // mas simple y segura: como mucho evita un borrado de una peticion que
+  // sigue viva en el Excel bajo otro estado, nunca causa un borrado indebido.
+  const clavesVistas = [...new Set([...filasCD.map((p) => p.clave), ...filasAvance.map((p) => p.clave)])];
 
   let insertadas = 0;
-  let actualizadas = filas.length;
+  let actualizadas = 0;
 
-  if (clavesVistas.length > 0) {
-    const chunksClaves = chunkPorTamano(clavesVistas);
+  if (filasCD.length > 0) {
+    const clavesCD = filasCD.map((p) => p.clave);
+    const chunksClaves = chunkPorTamano(clavesCD);
     const existentes = new Set();
     for (const chunk of chunksClaves) {
       const { results } = await db
@@ -160,19 +239,33 @@ export async function importarFilas(db, filas, opciones = {}) {
       for (const r of results) existentes.add(r.clave);
     }
 
-    const nuevasClaves = clavesVistas.filter((c) => !existentes.has(c)).length;
-    insertadas = nuevasClaves;
-    actualizadas = filas.length - insertadas;
+    const nuevasClaves = clavesCD.filter((c) => !existentes.has(c)).length;
 
-    const filasParaUpsert = [...porClave.values()];
-    const chunksFilas = chunkPorTamano(filasParaUpsert);
+    if (nuevasClaves > MAX_ALTAS_POR_LOTE) {
+      throw new Error(
+        `Lote rechazado: insertaria ${nuevasClaves} peticiones nuevas, por encima del limite de ` +
+          `seguridad (${MAX_ALTAS_POR_LOTE}/lote). Un sync legitimo trae, a lo sumo, un punado de ` +
+          `altas nuevas; revisar el origen del import antes de reintentar.`,
+      );
+    }
+
+    insertadas = nuevasClaves;
+    actualizadas += filasCD.length - insertadas;
+
+    const chunksFilas = chunkPorTamano(filasCD);
     await batch(
       db,
       chunksFilas.map((chunk) => db.prepare(UPSERT_SQL).bind(JSON.stringify(chunk))),
     );
-  } else {
-    insertadas = 0;
-    actualizadas = 0;
+  }
+
+  if (filasAvance.length > 0) {
+    const chunksAvance = chunkPorTamano(filasAvance);
+    const resultados = await batch(
+      db,
+      chunksAvance.map((chunk) => db.prepare(UPDATE_AVANCE_SQL).bind(JSON.stringify(chunk))),
+    );
+    for (const r of resultados) actualizadas += r.meta?.changes ?? 0;
   }
 
   const { syncId } = opciones;
