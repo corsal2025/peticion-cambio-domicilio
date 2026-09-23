@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Imprimir — Cambio de domicilio</title>
+  <style>
+    body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; margin: 2rem; color: #23262a; }
+    header { display: flex; align-items: center; gap: 1rem; border-bottom: 2px solid #23262a; padding-bottom: .8rem; margin-bottom: 1rem; }
+    header img { height: 56px; }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th, td { border: 1px solid #ccc; padding: .4rem .5rem; text-align: left; }
+    th { background: #f1f1ec; }
+    @media print { .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="/img/logo-municipal.png" alt="Municipalidad de Valparaíso" />
+    <div>
+      <h1 style="margin:0;font-size:1.1rem;">Peticiones de cambio de domicilio</h1>
+      <div style="font-size:.8rem;color:#5b6067;">Depto. Licencias de Conducir · Municipalidad de Valparaíso</div>
+    </div>
+  </header>
+  <button class="no-print" onclick="window.print()">Imprimir</button>
+  <table id="tabla">
+    <thead><tr><th>Nombre</th><th>RUT</th><th>Comuna</th><th>F. solicitud</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <script type="module">
+    import { api } from '/js/api.js';
+    const params = new URLSearchParams(location.search);
+    const soloMarcadas = params.get('marcadas') === 'true';
+    const peticiones = await api('/api/peticiones');
+    const filas = soloMarcadas ? peticiones.filter((p) => p.marcada) : peticiones;
+    document.getElementById('tbody').innerHTML = filas.map((p) => `
+      <tr>
+        <td>${p.nombre_completo}</td>
+        <td>${p.rut}</td>
+        <td>${p.comuna}</td>
+        <td>${p.enviada_en ? p.enviada_en.split('T')[0] : '—'}</td>
+      </tr>
+    `).join('');
+  </script>
+</body>
+</html>
