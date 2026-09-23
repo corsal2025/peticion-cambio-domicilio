@@ -99,11 +99,29 @@ function sincronizar_() {
   var libro = spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : SpreadsheetApp.getActive();
   var extraido = extraerFilas_(libro);
 
+  // Red de seguridad: si no se leyo ninguna hoja (libro vacio, permisos,
+  // cambio de estructura, etc.) no se manda NADA al worker. Un POST con 0
+  // hojas leidas no es evidencia de que las peticiones desaparecieron del
+  // Excel, y el worker interpretaria un payload vacio como "hay que
+  // limpiar" si no se informa hojasLeidas.
+  if (extraido.hojasLeidas === 0) {
+    extraido.avisos.push('Sincronizacion abortada: 0 hojas leidas, no se envia nada al worker.');
+    return {
+      hojasLeidas: extraido.hojasLeidas,
+      filas: extraido.filas,
+      avisos: extraido.avisos,
+      recibidas: 0,
+      insertadas: 0,
+      actualizadas: 0,
+      eliminadas: 0,
+    };
+  }
+
   var lotes = partirEnLotes_(extraido.filas, CONFIG.MAX_FILAS_POR_LOTE);
   var recibidas = 0, insertadas = 0, actualizadas = 0, eliminadas = 0;
 
   for (var i = 0; i < lotes.length; i++) {
-    var respuesta = enviarLote_(workerUrl, importSecret, lotes[i]);
+    var respuesta = enviarLote_(workerUrl, importSecret, lotes[i], extraido.hojasLeidas);
     recibidas += respuesta.recibidas || 0;
     insertadas += respuesta.insertadas || 0;
     actualizadas += respuesta.actualizadas || 0;
@@ -129,13 +147,13 @@ function partirEnLotes_(filas, tamano) {
   return lotes.length ? lotes : [[]];
 }
 
-function enviarLote_(workerUrl, importSecret, filas) {
+function enviarLote_(workerUrl, importSecret, filas, hojasLeidas) {
   var url = workerUrl.replace(/\/+$/, '') + '/api/import';
   var respuesta = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
     headers: { 'X-Import-Secret': importSecret },
-    payload: JSON.stringify({ filas: filas }),
+    payload: JSON.stringify({ filas: filas, hojasLeidas: hojasLeidas }),
     muteHttpExceptions: true,
   });
 

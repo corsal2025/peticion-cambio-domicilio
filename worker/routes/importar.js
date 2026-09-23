@@ -21,9 +21,10 @@ importarRoutes.post('/import', async (c) => {
 
   const body = await c.req.json().catch(() => ({}));
   const filas = Array.isArray(body.filas) ? body.filas : [];
+  const hojasLeidas = Number.isFinite(body.hojasLeidas) ? body.hojasLeidas : undefined;
 
   try {
-    const resumen = await importarFilas(c.env.DB, filas);
+    const resumen = await importarFilas(c.env.DB, filas, { hojasLeidas });
     await c.env.DB
       .prepare('INSERT INTO sync_log (fuente, recibidas, insertadas, actualizadas, errores) VALUES (?, ?, ?, ?, ?)')
       .bind('apps-script', resumen.recibidas, resumen.insertadas, resumen.actualizadas, 0)
