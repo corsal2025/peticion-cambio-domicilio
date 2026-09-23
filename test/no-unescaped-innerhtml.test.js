@@ -7,7 +7,9 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-const dirJs = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'js');
+const dirRaiz = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const dirJs = path.join(dirRaiz, 'public', 'js');
+const dirPublic = path.join(dirRaiz, 'public');
 
 function bloquesInnerHtml(codigo) {
   // Captura el statement completo `algo.innerHTML = ...;` (naive: hasta el
@@ -50,6 +52,32 @@ test('ningun archivo public/js interpola datos en innerHTML sin esc()', () => {
     for (const bloque of bloquesInnerHtml(codigo)) {
       for (const expr of interpolacionesSinEsc(bloque)) {
         problemas.push(`${archivo}: \${${expr}}`);
+      }
+    }
+  }
+  assert.deepEqual(problemas, []);
+});
+
+function scriptsInline(html) {
+  // Solo scripts inline (sin `src="..."`): los que traen `<script ...>codigo</script>`.
+  const regex = /<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g;
+  const bloques = [];
+  let m;
+  while ((m = regex.exec(html))) bloques.push(m[1]);
+  return bloques;
+}
+
+test('ningun script inline de public/*.html interpola datos en innerHTML sin esc()', () => {
+  const archivos = readdirSync(dirPublic).filter((f) => f.endsWith('.html'));
+  const problemas = [];
+  for (const archivo of archivos) {
+    const ruta = path.join(dirPublic, archivo);
+    const html = readFileSync(ruta, 'utf8');
+    for (const script of scriptsInline(html)) {
+      for (const bloque of bloquesInnerHtml(script)) {
+        for (const expr of interpolacionesSinEsc(bloque)) {
+          problemas.push(`${archivo}: \${${expr}}`);
+        }
       }
     }
   }

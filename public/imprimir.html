@@ -29,16 +29,17 @@
   </table>
   <script type="module">
     import { api } from '/js/api.js';
+    import { esc } from '/js/escape.js';
     const params = new URLSearchParams(location.search);
     const soloMarcadas = params.get('marcadas') === 'true';
     const peticiones = await api('/api/peticiones');
     const filas = soloMarcadas ? peticiones.filter((p) => p.marcada) : peticiones;
     document.getElementById('tbody').innerHTML = filas.map((p) => `
       <tr>
-        <td>${p.nombre_completo}</td>
-        <td>${p.rut}</td>
-        <td>${p.comuna}</td>
-        <td>${p.enviada_en ? p.enviada_en.split('T')[0] : '—'}</td>
+        <td>${esc(p.nombre_completo)}</td>
+        <td>${esc(p.rut)}</td>
+        <td>${esc(p.comuna)}</td>
+        <td>${esc(p.enviada_en ? p.enviada_en.split('T')[0] : '—')}</td>
       </tr>
     `).join('');
   </script>
