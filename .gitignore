@@ -8,3 +8,4 @@ publish/
 .atl/
 node_modules/
 .wrangler/
+migrations/seed/
