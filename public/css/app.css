@@ -76,13 +76,17 @@ h2.h5, h2.h6 { font-weight: 700; }
   letter-spacing: -0.015em;
   color: var(--ink) !important;
 }
+.navbar-brand img { height: 68px; width: auto; }
 .navbar-brand::after {
-  content: "Depto. Licencias de Conducir · Municipalidad de Valparaíso";
+  content: "Dirección de Tránsito";
   display: block;
   font-size: .82rem;
   font-weight: 500;
   letter-spacing: 0;
   color: var(--ink-faint);
+}
+@media (max-width: 480px) {
+  .navbar-brand img { height: 48px; }
 }
 .navbar-nav { gap: .15rem; }
 .nav-link {

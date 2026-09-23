@@ -16,6 +16,8 @@ const tbody = document.getElementById('tbody-peticiones');
 const buscador = document.getElementById('buscador');
 const buscadorInfo = document.getElementById('buscador-info');
 const btnEnviar = document.getElementById('btn-enviar-marcadas');
+const btnSincronizar = document.getElementById('btn-sincronizar');
+const ultimaSincronizacionEl = document.getElementById('ultima-sincronizacion');
 const nMarcadas = document.getElementById('n-marcadas');
 const chkTodas = document.getElementById('chk-marcar-todas');
 const mensaje = document.getElementById('mensaje');
@@ -144,6 +146,31 @@ async function cargar() {
   pintarTabla();
 }
 
+function formatearFechaHoraChile(iso) {
+  if (!iso) return null;
+  // `en` viene de SQLite datetime('now') en UTC sin sufijo de zona ('YYYY-MM-DD HH:MM:SS').
+  const fecha = new Date(iso.replace(' ', 'T') + 'Z');
+  if (Number.isNaN(fecha.getTime())) return null;
+  return new Intl.DateTimeFormat('es-CL', {
+    timeZone: 'America/Santiago',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(fecha);
+}
+
+async function actualizarEstadoSincronizacion() {
+  try {
+    const { ultimaSincronizacion } = await api('/api/sincronizar/estado');
+    const formateada = formatearFechaHoraChile(ultimaSincronizacion);
+    ultimaSincronizacionEl.textContent = formateada ? `Última sincronización: ${formateada}` : 'Última sincronización: —';
+  } catch {
+    // No es critico: si falla, simplemente no se muestra la fecha.
+  }
+}
+
 async function marcar(id, marcada) {
   await api(`/api/peticiones/${id}`, { method: 'PATCH', body: JSON.stringify({ marcada }) });
   const p = peticiones.find((x) => x.id === id);
@@ -186,6 +213,33 @@ btnEnviar.addEventListener('click', async () => {
   }
 });
 
+btnSincronizar.addEventListener('click', async () => {
+  const textoOriginal = btnSincronizar.textContent;
+  btnSincronizar.disabled = true;
+  btnSincronizar.textContent = 'Sincronizando…';
+  try {
+    const resultado = await api('/api/sincronizar', { method: 'POST' });
+    if (resultado.enCurso) {
+      mostrarMensaje(resultado.mensaje || 'La sincronización sigue corriendo, refresca en 1-2 minutos.', 'info');
+    } else {
+      const resumen = resultado.resumen || resultado;
+      const filas = Array.isArray(resumen.filas) ? resumen.filas.length : (resumen.recibidas ?? 0);
+      mostrarMensaje(
+        `Sincronización completa. Filas recibidas: ${filas}, nuevas: ${resumen.insertadas ?? 0}, actualizadas: ${resumen.actualizadas ?? 0}, ` +
+          `comunas nuevas/actualizadas: ${resumen.comunasNuevos ?? 0}/${resumen.comunasActualizados ?? 0}.`,
+        'success',
+      );
+    }
+    await cargar();
+    await actualizarEstadoSincronizacion();
+  } catch (err) {
+    mostrarMensaje(err.message, 'danger');
+  } finally {
+    btnSincronizar.disabled = false;
+    btnSincronizar.textContent = textoOriginal;
+  }
+});
+
 document.getElementById('form-manual').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const form = ev.target;
@@ -205,4 +259,5 @@ document.getElementById('btn-logout').addEventListener('click', async () => {
 });
 
 cargar().catch((err) => mostrarMensaje(err.message, 'danger'));
+actualizarEstadoSincronizacion();
 montarBannerRevision(document.getElementById('banner-revision'));
