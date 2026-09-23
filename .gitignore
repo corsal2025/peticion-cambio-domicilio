@@ -9,3 +9,4 @@ publish/
 node_modules/
 .wrangler/
 migrations/seed/
+.dev.vars
