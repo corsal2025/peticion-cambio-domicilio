@@ -180,13 +180,19 @@ function doPost(e) {
     return jsonOutput_({ ok: false, error: 'no autorizado' });
   }
 
+  // accion: paridad con los dos botones del dashboard ("Cargar cambios de
+  // domicilio" -> 'cargar', "Actualizar estado solicitud" -> 'actualizar').
+  // Cualquier otro valor (u omitido, ej. el trigger de tiempo llamando esto
+  // via sincronizarProgramada) hace la corrida completa de siempre.
+  var accion = (body && body.accion) === 'cargar' || (body && body.accion) === 'actualizar' ? body.accion : undefined;
+
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) {
     return jsonOutput_({ ok: false, error: 'ya hay una sincronizacion en curso' });
   }
 
   try {
-    var resultado = sincronizar_(true);
+    var resultado = sincronizar_(true, accion);
     return jsonOutput_({ ok: true, resumen: resultado });
   } catch (err) {
     return jsonOutput_({ ok: false, error: err.message });
@@ -222,8 +228,10 @@ function secretosIguales_(a, b) {
  *
  * @param {boolean} forzar Si es true, ignora el chequeo de modifiedTime sin
  *   cambios (usado por sincronizarAhora). El trigger programado pasa false.
+ * @param {'cargar'|'actualizar'|undefined} accion filtra que filas se
+ *   procesan (ver doPost); undefined = corrida completa (cargar + actualizar).
  */
-function sincronizar_(forzar) {
+function sincronizar_(forzar, accion) {
   var props = PropertiesService.getScriptProperties();
   var workerUrl = props.getProperty('WORKER_URL');
   var importSecret = props.getProperty('IMPORT_SECRET');
@@ -242,7 +250,7 @@ function sincronizar_(forzar) {
   // que chequear (el propio Sheet ya es la fuente).
   if (spreadsheetId) {
     var libroNativo = SpreadsheetApp.openById(spreadsheetId);
-    return sincronizarLibro_(workerUrl, importSecret, libroNativo);
+    return sincronizarLibro_(workerUrl, importSecret, libroNativo, accion);
   }
 
   // Camino standalone (default): XLSX_FILE_ID apunta al .xlsx real en el
@@ -283,7 +291,7 @@ function sincronizar_(forzar) {
 
   try {
     var libroTemporal = SpreadsheetApp.openById(tempFileId);
-    var resultado = sincronizarLibro_(workerUrl, importSecret, libroTemporal);
+    var resultado = sincronizarLibro_(workerUrl, importSecret, libroTemporal, accion);
     props.setProperty('XLSX_LAST_SYNCED_MODIFIED', modifiedTime);
     return resultado;
   } finally {
@@ -302,9 +310,11 @@ function sincronizar_(forzar) {
  * Sheet: copia temporal del xlsx, o el SPREADSHEET_ID manual) y las envia al
  * worker. Es el mismo cuerpo que antes tenia sincronizar_() cuando el script
  * era bound a la planilla.
+ *
+ * @param {'cargar'|'actualizar'|undefined} accion ver extraerFilas_.
  */
-function sincronizarLibro_(workerUrl, importSecret, libro) {
-  var extraido = extraerFilas_(libro);
+function sincronizarLibro_(workerUrl, importSecret, libro, accion) {
+  var extraido = extraerFilas_(libro, accion);
 
   // Sincroniza el directorio de correos de comunas (hoja "CORREOS CAMBIO DE
   // DOMICLIO") en la MISMA corrida. A diferencia del sync de peticiones, este
@@ -528,13 +538,31 @@ function finalizarImport_(workerUrl, importSecret, datos) {
  * Recorre todas las hojas del libro (salvo las ignoradas), ubica la fila de
  * encabezados y arma una fila de import por cada fila cuyo estado de carpeta
  * es "CAMBIO DE DOMICILIO" o una etapa posterior (rango >= 1).
+ *
+ * @param {'cargar'|'actualizar'|undefined} accion cuando se especifica, filtra
+ *   Y evita construir filas fuera de ese flujo: 'cargar' SOLO procesa filas
+ *   exactamente "CAMBIO DE DOMICILIO" (rango 1); 'actualizar' SOLO procesa
+ *   filas en etapa posterior (rango >= 2, las que pueden avanzar una peticion
+ *   ya existente). undefined (corrida completa/trigger) procesa ambas, igual
+ *   que antes.
+ *
+ * Lectura (Sheets API es la parte lenta de la sincronizacion, no el JS): por
+ * hoja se hacen a lo sumo 2 llamadas .getValues() en vez de leer celda por
+ * celda: (1) una chica, SOLO las primeras FILAS_MAX_ENCABEZADO filas a ancho
+ * completo, para ubicar la fila de encabezados y mapear columnas; (2) una vez
+ * conocidas las columnas que realmente se necesitan (nombre/rut/estado/
+ * comuna/fecha/clases), se lee el CUERPO de datos acotado a ese rango de
+ * columnas (min..max de las necesarias), no a todo el ancho de la hoja — el
+ * libro real tiene columnas de sobra que nunca se usan aca.
  */
-function extraerFilas_(libro) {
+function extraerFilas_(libro, accion) {
   var hojas = libro.getSheets();
   var ignoradas = CONFIG.HOJAS_IGNORADAS.map(fold_);
   var filas = [];
   var avisos = [];
   var hojasLeidas = 0;
+  var soloCambioDomicilio = accion === 'cargar';
+  var soloAvance = accion === 'actualizar';
 
   for (var h = 0; h < hojas.length; h++) {
     var hoja = hojas[h];
@@ -544,12 +572,18 @@ function extraerFilas_(libro) {
       continue;
     }
 
-    var datos = hoja.getDataRange().getValues();
-    if (!datos.length) {
+    var totalFilas = hoja.getLastRow();
+    var totalCols = hoja.getLastColumn();
+    if (totalFilas === 0 || totalCols === 0) {
       continue;
     }
 
-    var encabezado = encontrarEncabezado_(datos);
+    // (1) Encabezado: solo las primeras filas, ancho completo (no sabemos
+    // todavia que columnas hacen falta).
+    var filasEncabezado = Math.min(totalFilas, CONFIG.FILAS_MAX_ENCABEZADO);
+    var datosEncabezado = hoja.getRange(1, 1, filasEncabezado, totalCols).getValues();
+
+    var encabezado = encontrarEncabezado_(datosEncabezado);
     if (!encabezado) {
       avisos.push('Hoja "' + nombreHoja + '": no se encontro la fila de encabezados (con "RUT"), se omite.');
       continue;
@@ -582,27 +616,60 @@ function extraerFilas_(libro) {
       continue;
     }
 
+    if (totalFilas <= encabezado.fila + 1) {
+      hojasLeidas++;
+      continue; // hoja sin filas de datos debajo del encabezado
+    }
+
+    // (2) Cuerpo: SOLO las columnas necesarias (nunca celda por celda), y
+    // SOLO las filas debajo del encabezado. Las columnas 0-based
+    // (cNombre/cRut/etc, indices dentro de `datosEncabezado`) se recalculan
+    // como offsets relativos a `colMin` porque `datosCuerpo` ya no arranca en
+    // la columna 1 de la hoja sino en `colMin`.
+    var indicesUsados = [cNombre, cRut, cEstado, cComuna, cFecha, cFechaSubida, cClases].filter(function (i) { return i >= 0; });
+    var colMin = Math.min.apply(null, indicesUsados); // 0-based
+    var colMax = Math.max.apply(null, indicesUsados); // 0-based
+    var filaInicioCuerpo = encabezado.fila + 2; // 1-based, Sheets API
+    var numFilasCuerpo = totalFilas - filaInicioCuerpo + 1;
+    var datosCuerpo = hoja.getRange(filaInicioCuerpo, colMin + 1, numFilasCuerpo, colMax - colMin + 1).getValues();
+
+    var rNombre = cNombre >= 0 ? cNombre - colMin : -1;
+    var rRut = cRut - colMin;
+    var rEstado = cEstado - colMin;
+    var rComuna = cComuna >= 0 ? cComuna - colMin : -1;
+    var rFecha = cFecha >= 0 ? cFecha - colMin : -1;
+    var rFechaSubida = cFechaSubida >= 0 ? cFechaSubida - colMin : -1;
+    var rClases = cClases >= 0 ? cClases - colMin : -1;
+
     hojasLeidas++;
     var oficina = oficinaDeHoja_(nombreHoja);
 
-    for (var r = encabezado.fila + 1; r < datos.length; r++) {
-      var fila = datos[r];
-      var rutRaw = String(fila[cRut] == null ? '' : fila[cRut]).trim();
+    for (var r = 0; r < datosCuerpo.length; r++) {
+      var fila = datosCuerpo[r];
+      var rutRaw = String(fila[rRut] == null ? '' : fila[rRut]).trim();
       if (!rutRaw) {
         continue;
       }
 
-      var estadoCrudo = String(fila[cEstado] == null ? '' : fila[cEstado]).trim();
+      var estadoCrudo = String(fila[rEstado] == null ? '' : fila[rEstado]).trim();
       var rangoEstado = rangoEstadoCarpeta_(estadoCrudo);
       if (rangoEstado < 1) {
         continue; // fuera del flujo de cambio de domicilio
       }
+      // accion-based filtering: evita construir (y despues mandar/procesar en
+      // el worker) filas que esta corrida ni siquiera va a usar.
+      if (soloCambioDomicilio && rangoEstado !== 1) {
+        continue;
+      }
+      if (soloAvance && rangoEstado < 2) {
+        continue;
+      }
 
-      var nombre = cNombre >= 0 ? String(fila[cNombre] == null ? '' : fila[cNombre]).trim() : '';
-      var comunaRaw = cComuna >= 0 ? String(fila[cComuna] == null ? '' : fila[cComuna]).trim() : '';
-      var clases = cClases >= 0 ? String(fila[cClases] == null ? '' : fila[cClases]).trim() : '';
-      var fechaSolicitud = cFecha >= 0 ? leerFecha_(fila[cFecha]) : null;
-      var fechaSubida = cFechaSubida >= 0 ? leerFecha_(fila[cFechaSubida]) : null;
+      var nombre = rNombre >= 0 ? String(fila[rNombre] == null ? '' : fila[rNombre]).trim() : '';
+      var comunaRaw = rComuna >= 0 ? String(fila[rComuna] == null ? '' : fila[rComuna]).trim() : '';
+      var clases = rClases >= 0 ? String(fila[rClases] == null ? '' : fila[rClases]).trim() : '';
+      var fechaSolicitud = rFecha >= 0 ? leerFecha_(fila[rFecha]) : null;
+      var fechaSubida = rFechaSubida >= 0 ? leerFecha_(fila[rFechaSubida]) : null;
 
       var rutNormalizado = normalizeAndValidateRut_(rutRaw);
 
@@ -613,7 +680,7 @@ function extraerFilas_(libro) {
         clases: clases || null,
         fechaSolicitud: fechaSolicitud,
         oficina: oficina,
-        origen: nombreHoja + '!fila ' + (r + 1),
+        origen: nombreHoja + '!fila ' + (filaInicioCuerpo + r),
         ordenImportacion: filas.length + 1,
         rutInvalido: !rutNormalizado,
         estadoCarpeta: estadoCrudo,

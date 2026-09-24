@@ -168,10 +168,15 @@ const UPSERT_SQL = `
 
 // Filas que NO son "CAMBIO DE DOMICILIO" exacto (es_cd = 0) pero traen rango
 // >= 2 (ya solicitadas a la comuna o subidas a CONASET/F8/oficio/correo):
-// paridad con ExcelPeticionImporter.cs ImportCore, estas filas SOLO pueden
-// avanzar el estado_carpeta (y setear subida_en al llegar a rango 3) de una
-// peticion YA EXISTENTE con la misma clave (rut_norm, comuna_norm). Nunca
-// insertan: si no hay match, el UPDATE simplemente no toca ninguna fila.
+// paridad con ExcelPeticionImporter.cs ActualizarEstadosCarpeta, estas filas
+// SOLO pueden avanzar el estado_carpeta (y setear subida_en al llegar a rango
+// 3) de peticion(es) YA EXISTENTE(s). El match es por RUT normalizado —
+// SIN mirar la comuna: si la misma persona tiene peticiones en mas de una
+// comuna, todas avanzan juntas (igual que el .NET viejo). Nunca insertan: si
+// no hay match, el UPDATE simplemente no toca ninguna fila. Las filas con
+// rut invalido matchean por nombre folded en vez de rut (ver
+// actualizarAvancePorNombre, resuelto en JS porque SQLite/D1 no tiene una
+// funcion de fold-accents nativa).
 const UPDATE_AVANCE_SQL = `
   UPDATE peticiones SET
     estado_carpeta = CASE
@@ -184,12 +189,11 @@ const UPDATE_AVANCE_SQL = `
   FROM (
     SELECT
       json_each.value ->> 'rut_norm' AS rut_norm,
-      json_each.value ->> 'comuna_norm' AS comuna_norm,
       json_each.value ->> 'estado_carpeta' AS estado_carpeta,
       json_each.value ->> 'fecha_subida_carpeta' AS fecha_subida_carpeta
     FROM json_each(?)
   ) AS t
-  WHERE peticiones.rut_norm = t.rut_norm AND peticiones.comuna_norm = t.comuna_norm
+  WHERE peticiones.rut_norm = t.rut_norm AND peticiones.rut_invalido = 0
     -- Presupuesto de escritura D1: solo tocar la fila si realmente va a
     -- avanzar de rango, o si va a setear subida_en por primera vez al llegar
     -- a rango >= 3. Si el rango entrante no supera al actual (re-sincronizar
@@ -200,6 +204,56 @@ const UPDATE_AVANCE_SQL = `
       OR (peticiones.subida_en IS NULL AND ${rangoSql('t.estado_carpeta')} >= 3)
     )
 `;
+
+/**
+ * Version por nombre (folded) de UPDATE_AVANCE_SQL, para filas cuyo RUT es
+ * invalido (paridad ActualizarEstadosCarpeta: clave = "nom:" + fold(nombre)
+ * cuando el RUT no es valido). Como SQLite/D1 no tiene una funcion de
+ * fold-accents nativa, el match se resuelve en JS contra el (chico) set de
+ * peticiones con rut_invalido = 1, y solo se escriben las filas que realmente
+ * cambian (ninguna escritura de mas).
+ */
+async function actualizarAvancePorNombre(db, filasAvanceNombre) {
+  if (filasAvanceNombre.length === 0) return 0;
+
+  const porNombreFolded = new Map(filasAvanceNombre.map((p) => [fold(p.nombre_completo), p]));
+  const { results: existentes } = await db
+    .prepare('SELECT id, nombre_completo, estado_carpeta, subida_en FROM peticiones WHERE rut_invalido = 1')
+    .all();
+
+  const cambios = [];
+  for (const row of existentes) {
+    const p = porNombreFolded.get(fold(row.nombre_completo));
+    if (!p) continue;
+
+    const rangoActual = rango(row.estado_carpeta);
+    if (p.rango <= rangoActual) continue; // no avanza, no se toca (presupuesto de escritura)
+
+    const subidaEn =
+      p.rango >= 3 ? row.subida_en ?? p.fecha_subida_carpeta ?? new Date().toISOString().slice(0, 10) : row.subida_en ?? null;
+
+    cambios.push({ id: row.id, estado_carpeta: p.estado_carpeta, subida_en: subidaEn });
+  }
+
+  if (cambios.length === 0) return 0;
+
+  await batch(
+    db,
+    chunkPorTamano(cambios).map((chunk) =>
+      db
+        .prepare(
+          `UPDATE peticiones SET
+             estado_carpeta = j.value ->> 'estado_carpeta',
+             subida_en = j.value ->> 'subida_en'
+           FROM json_each(?) AS j
+           WHERE peticiones.id = j.value ->> 'id'`,
+        )
+        .bind(JSON.stringify(chunk)),
+    ),
+  );
+
+  return cambios.length;
+}
 
 /**
  * Procesa UN lote del import: upsert idempotente de sus filas, set-based
@@ -223,27 +277,37 @@ export async function importarFilas(db, filas, opciones = {}) {
   }
 
   const preparadas = filas.map(prepararFila);
-  // Si la misma clave se repite dentro de un lote, se queda con la ultima
-  // version (paridad con el comportamiento anterior: upserts secuenciales,
-  // "el ultimo que escribe gana").
-  const porClave = new Map();
-  for (const p of preparadas) porClave.set(p.clave, p);
 
-  // Paridad con ExcelPeticionImporter.cs ImportCore:
+  // Paridad con ExcelPeticionImporter.cs ImportCore/ActualizarEstadosCarpeta:
   //  - es_cd = 1 (estado crudo EXACTAMENTE "CAMBIO DE DOMICILIO"): upsert
-  //    libre (crea o refresca), via UPSERT_SQL.
-  //  - es_cd = 0 && rango >= 2: SOLO puede avanzar una peticion YA EXISTENTE
-  //    con la misma clave; nunca crea. Via UPDATE_AVANCE_SQL.
-  //  - es_cd = 0 && rango < 2: fuera del flujo, se descarta sin tocar nada
-  //    (ni upsert, ni update, ni vistas).
-  const filasCD = [];
-  const filasAvance = [];
-  for (const p of porClave.values()) {
+  //    libre (crea o refresca), via UPSERT_SQL. Si la misma clave (rut,
+  //    comuna) se repite dentro del lote, se queda con la ultima version
+  //    ("el ultimo que escribe gana", paridad con el comportamiento anterior
+  //    de upserts secuenciales).
+  //  - es_cd = 0 && rango >= 2: SOLO puede avanzar peticion(es) YA
+  //    EXISTENTE(s), matcheadas por PERSONA (rut normalizado, o nombre
+  //    folded si el rut es invalido) — NO por (rut, comuna): si la misma
+  //    persona aparece mas de una vez en este lote (varias hojas, o
+  //    peticiones en mas de una comuna), se aplica el estado MAS avanzado de
+  //    todas. Nunca crea.
+  //  - es_cd = 0 && rango < 2: fuera del flujo, se descarta sin tocar nada.
+  const porClaveCD = new Map();
+  const porPersona = new Map();
+  for (const p of preparadas) {
     if (p.es_cd) {
-      filasCD.push(p);
+      porClaveCD.set(p.clave, p);
     } else if (p.rango >= 2) {
-      filasAvance.push(p);
+      const clavePersona = p.rut_invalido ? `nom:${fold(p.nombre_completo)}` : `rut:${p.rut_norm}`;
+      const actual = porPersona.get(clavePersona);
+      if (!actual || p.rango > actual.rango) porPersona.set(clavePersona, p);
     }
+  }
+  const filasCD = [...porClaveCD.values()];
+  const filasAvanceRut = [];
+  const filasAvanceNombre = [];
+  for (const [clavePersona, p] of porPersona) {
+    if (clavePersona.startsWith('rut:')) filasAvanceRut.push(p);
+    else filasAvanceNombre.push(p);
   }
 
   let insertadas = 0;
@@ -284,14 +348,16 @@ export async function importarFilas(db, filas, opciones = {}) {
     );
   }
 
-  if (filasAvance.length > 0) {
-    const chunksAvance = chunkPorTamano(filasAvance);
+  if (filasAvanceRut.length > 0) {
+    const chunksAvance = chunkPorTamano(filasAvanceRut);
     const resultados = await batch(
       db,
       chunksAvance.map((chunk) => db.prepare(UPDATE_AVANCE_SQL).bind(JSON.stringify(chunk))),
     );
     for (const r of resultados) actualizadas += r.meta?.changes ?? 0;
   }
+
+  actualizadas += await actualizarAvancePorNombre(db, filasAvanceNombre);
 
   return { recibidas: filas.length, insertadas, actualizadas, clavesCD: filasCD.map((p) => p.clave) };
 }

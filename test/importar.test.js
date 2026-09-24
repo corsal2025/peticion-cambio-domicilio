@@ -278,3 +278,69 @@ test('un lote que insertaria mas de 200 peticiones nuevas es rechazado (guardia 
   const lista = await listarPeticiones(db, {});
   assert.equal(lista.length, 0, 'el rechazo no debe dejar altas parciales');
 });
+
+// --- Paridad con ExcelPeticionImporter.cs ActualizarEstadosCarpeta: avance
+// matchea por RUT (regardless de comuna) o por nombre folded si el rut es
+// invalido, y siempre con el estado MAS avanzado que aparezca para esa
+// persona.
+
+test('avance matchea por RUT sin importar la comuna: una peticion en OTRA comuna con el mismo rut tambien avanza', async () => {
+  const db = crearD1Fake();
+  await importarUnLote(db, [
+    fila({ rut: '18.785.387-7', comuna: 'VALPARAISO', estadoCarpeta: 'CAMBIO DE DOMICILIO' }),
+    fila({ rut: '18.785.387-7', comuna: 'VIÑA DEL MAR', estadoCarpeta: 'CAMBIO DE DOMICILIO' }),
+  ]);
+
+  await importarUnLote(db, [fila({ rut: '18.785.387-7', comuna: 'VALPARAISO', estadoCarpeta: 'SUBIDA A CONASET' })]);
+
+  const lista = await listarPeticiones(db, {});
+  assert.equal(lista.length, 2);
+  assert.ok(
+    lista.every((p) => (p.estadoCarpeta ?? p.estado_carpeta) === 'SUBIDA A CONASET'),
+    'ambas peticiones del mismo rut deben avanzar juntas, sin importar la comuna',
+  );
+});
+
+test('avance aplica el estado MAS avanzado cuando la misma persona aparece dos veces en el mismo lote', async () => {
+  const db = crearD1Fake();
+  await importarUnLote(db, [fila({ rut: '18.785.387-7', comuna: 'VALPARAISO', estadoCarpeta: 'CAMBIO DE DOMICILIO' })]);
+
+  // Dos filas del mismo rut en el mismo lote (ej. aparece en 2 hojas), una
+  // con un rango menor: debe ganar la mas avanzada, no la ultima del arreglo.
+  await importarUnLote(db, [
+    fila({ rut: '18.785.387-7', comuna: 'VALPARAISO', estadoCarpeta: 'SUBIDA A CONASET' }),
+    fila({ rut: '18.785.387-7', comuna: 'VALPARAISO', estadoCarpeta: 'CAMBIO DE DOMICILIO SOLICITADO' }),
+  ]);
+
+  const [p] = await listarPeticiones(db, {});
+  assert.equal(p.estadoCarpeta ?? p.estado_carpeta, 'SUBIDA A CONASET');
+});
+
+test('avance con rut invalido matchea por nombre folded (paridad ActualizarEstadosCarpeta)', async () => {
+  const db = crearD1Fake();
+  await importarUnLote(db, [
+    fila({ rut: 'SIN RUT', rutInvalido: true, nombreCompleto: 'José Pérez', comuna: 'VALPARAISO', estadoCarpeta: 'CAMBIO DE DOMICILIO' }),
+  ]);
+
+  await importarUnLote(db, [
+    fila({ rut: 'SIN RUT', rutInvalido: true, nombreCompleto: 'JOSE PEREZ', comuna: 'OTRA HOJA', estadoCarpeta: 'SUBIDA A CONASET' }),
+  ]);
+
+  const [p] = await listarPeticiones(db, {});
+  assert.equal(p.estadoCarpeta ?? p.estado_carpeta, 'SUBIDA A CONASET', 'debe matchear por nombre folded (sin tildes/mayus)');
+  assert.ok(p.subidaEn ?? p.subida_en);
+});
+
+test('avance con rut invalido NUNCA matchea contra una peticion con rut valido', async () => {
+  const db = crearD1Fake();
+  await importarUnLote(db, [
+    fila({ rut: '18.785.387-7', comuna: 'VALPARAISO', nombreCompleto: 'Ana Soto', estadoCarpeta: 'CAMBIO DE DOMICILIO' }),
+  ]);
+
+  await importarUnLote(db, [
+    fila({ rut: 'SIN RUT', rutInvalido: true, nombreCompleto: 'Ana Soto', comuna: 'OTRA HOJA', estadoCarpeta: 'SUBIDA A CONASET' }),
+  ]);
+
+  const [p] = await listarPeticiones(db, {});
+  assert.equal(p.estadoCarpeta ?? p.estado_carpeta, 'CAMBIO DE DOMICILIO', 'una fila rut-invalido nunca debe tocar una peticion con rut valido');
+});

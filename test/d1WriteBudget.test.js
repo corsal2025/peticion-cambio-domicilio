@@ -15,15 +15,21 @@ import { importarFilas, finalizarImport } from '../worker/lib/importar.js';
 const N_AVANCE = 4600;
 const N_CD = 5;
 
+// rut_norm/rut deben ser puramente digitos (o K): worker/lib/importar.js
+// normaliza el rut entrante con rutNorm() (que descarta cualquier caracter
+// que no sea 0-9/K) antes de matchear contra la fila sembrada, asi que un
+// rut con letras (ej. "R5") NO calzaria contra un rut_norm sembrado como
+// "R5" (rutNorm("R5") = "5", no "R5"). Rangos numericos disjuntos para CD vs
+// avance, para que ademas no colisionen entre si.
 function rutNormDe(i) {
-  return `R${i}`;
+  return String(1_000_000 + i);
 }
 
 /** Siembra N_CD peticiones "CAMBIO DE DOMICILIO" + N_AVANCE ya avanzadas a "CAMBIO DE DOMICILIO SOLICITADO", sin pasar por importarFilas (para no contaminar el conteo de rowsWritten del propio test). */
 function sembrarEstadoEstable(db) {
   const filasSql = [];
   for (let i = 0; i < N_CD; i++) {
-    const clave = `CD${i}`;
+    const clave = String(9_000_000 + i);
     filasSql.push(
       `('Persona CD ${i}', '${clave}', '${clave}', 'COMUNA', 'COMUNA', 'CAMBIO DE DOMICILIO')`,
     );
@@ -40,7 +46,7 @@ function sembrarEstadoEstable(db) {
 }
 
 function filaCD(i) {
-  const clave = `CD${i}`;
+  const clave = String(9_000_000 + i);
   return {
     nombreCompleto: `Persona CD ${i}`,
     rut: clave,

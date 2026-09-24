@@ -10,7 +10,8 @@ import { ejecutarSincronizacionManual, obtenerUltimaSincronizacion } from '../li
 export const sincronizarRoutes = new Hono();
 
 sincronizarRoutes.post('/sincronizar', async (c) => {
-  const resultado = await ejecutarSincronizacionManual(c.env);
+  const body = await c.req.json().catch(() => ({}));
+  const resultado = await ejecutarSincronizacionManual(c.env, fetch, body.accion);
   return c.json(resultado.body, resultado.status);
 });
 

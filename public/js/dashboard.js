@@ -16,7 +16,8 @@ const tbody = document.getElementById('tbody-peticiones');
 const buscador = document.getElementById('buscador');
 const buscadorInfo = document.getElementById('buscador-info');
 const btnEnviar = document.getElementById('btn-enviar-marcadas');
-const btnSincronizar = document.getElementById('btn-sincronizar');
+const btnCargar = document.getElementById('btn-cargar');
+const btnActualizarEstado = document.getElementById('btn-actualizar-estado');
 const ultimaSincronizacionEl = document.getElementById('ultima-sincronizacion');
 const nMarcadas = document.getElementById('n-marcadas');
 const chkTodas = document.getElementById('chk-marcar-todas');
@@ -213,12 +214,19 @@ btnEnviar.addEventListener('click', async () => {
   }
 });
 
-btnSincronizar.addEventListener('click', async () => {
-  const textoOriginal = btnSincronizar.textContent;
-  btnSincronizar.disabled = true;
-  btnSincronizar.textContent = 'Sincronizando…';
+/**
+ * Dispara una sincronizacion manual bajo demanda (paridad con los dos
+ * botones del .NET viejo, ver Index.cshtml): `cargar` procesa solo filas
+ * "CAMBIO DE DOMICILIO" + comunas; `actualizar` solo avanza el estado de
+ * peticiones ya existentes (rango >= 2), matcheando por RUT. Ambos disparan
+ * el mismo POST /api/sincronizar, que reenvia `accion` a Apps Script.
+ */
+async function ejecutarSincronizacion(boton, accion, textoEnCurso) {
+  const textoOriginal = boton.textContent;
+  boton.disabled = true;
+  boton.textContent = textoEnCurso;
   try {
-    const resultado = await api('/api/sincronizar', { method: 'POST' });
+    const resultado = await api('/api/sincronizar', { method: 'POST', body: JSON.stringify({ accion }) });
     if (resultado.enCurso) {
       mostrarMensaje(resultado.mensaje || 'La sincronización sigue corriendo, refresca en 1-2 minutos.', 'info');
     } else {
@@ -235,10 +243,13 @@ btnSincronizar.addEventListener('click', async () => {
   } catch (err) {
     mostrarMensaje(err.message, 'danger');
   } finally {
-    btnSincronizar.disabled = false;
-    btnSincronizar.textContent = textoOriginal;
+    boton.disabled = false;
+    boton.textContent = textoOriginal;
   }
-});
+}
+
+btnCargar.addEventListener('click', () => ejecutarSincronizacion(btnCargar, 'cargar', 'Cargando…'));
+btnActualizarEstado.addEventListener('click', () => ejecutarSincronizacion(btnActualizarEstado, 'actualizar', 'Actualizando…'));
 
 document.getElementById('form-manual').addEventListener('submit', async (ev) => {
   ev.preventDefault();

@@ -67,11 +67,18 @@ npx wrangler pages secret put APPS_SCRIPT_URL --project-name=peticion-cambio-dom
 
 `APPS_SCRIPT_URL` es la URL del deployment "Aplicacion web" del proyecto
 Apps Script (`https://script.google.com/macros/s/AKfycb.../exec`, ver sección
-6 "Camino A" paso 8 más abajo). La usa el botón "Sincronizar ahora" del
-dashboard (`POST /api/sincronizar`) para forzar una sincronización sin
-esperar el trigger de 15 minutos; el worker reenvía el mismo `IMPORT_SECRET`
-en el body. Si falta esta secret, el botón responde 503 pero el resto del
-sitio funciona igual (el time trigger de Apps Script sigue corriendo solo).
+6 "Camino A" paso 8 más abajo). La usan los DOS botones del dashboard
+(paridad con el .NET viejo, ver `Index.cshtml`): "Cargar cambios de
+domicilio" (`POST /api/sincronizar {accion:'cargar'}`, procesa SOLO filas
+exactamente "CAMBIO DE DOMICILIO" + comunas) y "Actualizar estado solicitud"
+(`{accion:'actualizar'}`, SOLO avanza el estado de peticiones ya existentes,
+rango >= 2) — ambos fuerzan una sincronización sin esperar el trigger de 15
+minutos, que reenvía el mismo `IMPORT_SECRET` en el body junto a `accion`.
+Apps Script (`doPost`) enruta segun `accion` a `extraerFilas_` (ver
+`apps-script/Code.gs`), que solo construye las filas de ESE flujo. Si falta
+esta secret, ambos botones responden 503 pero el resto del sitio funciona
+igual (el time trigger de Apps Script — que corre AMBOS flujos, `cargar` y
+`actualizar` — sigue corriendo solo).
 
 `SESSION_SECRET` es obligatorio: si falta, el worker responde 500 (fail
 closed) en `/api/auth/*` y en toda ruta protegida — nunca cae a un secreto
@@ -221,8 +228,9 @@ https://drive.google.com/file/d/ESTE_ES_EL_ID/view
    - `sincronizarAhora()` — fuerza una sincronización manual completa (no
      respeta el chequeo de "sin cambios"), útil para validar que todo quedó
      bien configurado antes de esperar al trigger.
-8. Publicar el web app (para que el botón "Sincronizar ahora" del dashboard
-   pueda llamarlo): `Implementar > Nueva implementación > tipo "Aplicación
+8. Publicar el web app (para que los botones "Cargar cambios de domicilio" /
+   "Actualizar estado solicitud" del dashboard puedan llamarlo): `Implementar
+   > Nueva implementación > tipo "Aplicación
    web"`, con "Ejecutar como" = tu cuenta y "Quién tiene acceso" = "Cualquier
    usuario" (ya viene precargado desde `appsscript.json`, sección `webapp`).
    Copiar la URL `.../exec` que entrega Google y guardarla como el secret
@@ -297,6 +305,20 @@ llega a llamar a `finalizar` — por eso el worker ya no necesita rastrear
 > `/api/import/finalizar`. Con esto, una re-sincronización sin cambios reales
 > de ~4600 filas escribe a lo sumo un puñado de filas (ver
 > `test/d1WriteBudget.test.js`), en vez de ~4600 + tracking por lote.
+
+**Matching de avance por RUT (paridad `ExcelPeticionImporter.cs
+ActualizarEstadosCarpeta`):** las filas en etapa posterior a "CAMBIO DE
+DOMICILIO" (rango >= 2) avanzan peticion(es) existentes matcheando por RUT
+normalizado, **sin mirar la comuna** — si la misma persona tiene peticiones
+en más de una comuna, todas avanzan juntas. Si el RUT es inválido, el match
+cae a nombre completo folded (sin tildes/mayúsculas). Cuando la misma persona
+aparece más de una vez en la sincronización (varias hojas, o repartida en
+varios lotes), se aplica el estado MÁS avanzado de todos los que aparezcan
+para ella. Ver `worker/lib/importar.js` (`UPDATE_AVANCE_SQL` para el caso
+RUT válido, set-based vía `json_each`; `actualizarAvancePorNombre` para el
+caso RUT inválido, resuelto en JS porque SQLite/D1 no tiene una función de
+fold-accents nativa — el set de peticiones con `rut_invalido = 1` es chico,
+así que esto no compromete el presupuesto de escritura).
 
 **Sincronización de correos de comunas:** en la misma corrida de
 `sincronizarAhora`/`sincronizarProgramada` (la que dispara el trigger cada 15

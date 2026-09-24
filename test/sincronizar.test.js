@@ -76,6 +76,30 @@ test('ejecutarSincronizacionManual responde 502 si Apps Script contesta con erro
   assert.equal(resultado.body.ok, false);
 });
 
+test('ejecutarSincronizacionManual reenvia accion=cargar/actualizar a Apps Script cuando se especifica', async () => {
+  const db = crearD1Fake();
+  const llamadas = [];
+  const fetchFalso = async (url, opciones) => {
+    llamadas.push(JSON.parse(opciones.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) };
+  };
+
+  await ejecutarSincronizacionManual(envBase(db), fetchFalso, 'cargar');
+  assert.equal(llamadas[0].accion, 'cargar');
+});
+
+test('ejecutarSincronizacionManual no manda accion invalida/omitida (Apps Script hace la corrida completa)', async () => {
+  const db = crearD1Fake();
+  const llamadas = [];
+  const fetchFalso = async (url, opciones) => {
+    llamadas.push(JSON.parse(opciones.body));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) };
+  };
+
+  await ejecutarSincronizacionManual(envBase(db), fetchFalso, 'algo-invalido');
+  assert.equal(llamadas[0].accion, undefined);
+});
+
 test('obtenerUltimaSincronizacion retorna null sin filas en sync_log', async () => {
   const db = crearD1Fake();
   assert.equal(await obtenerUltimaSincronizacion(db), null);

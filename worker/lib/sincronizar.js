@@ -20,13 +20,20 @@ const CLAVE_ULTIMO_INTENTO_MS = 'sincronizar.ultimo_intento_ms';
 const VENTANA_RATE_LIMIT_MS = 60_000;
 const TIMEOUT_MS = 90_000;
 
+const ACCIONES_VALIDAS = new Set(['cargar', 'actualizar']);
+
 /**
  * Ejecuta (o rechaza) una sincronizacion manual.
  * @param {object} env Bindings del worker (DB, APPS_SCRIPT_URL, IMPORT_SECRET).
  * @param {typeof fetch} fetchImpl Inyectable para tests; por defecto usa el fetch global.
+ * @param {'cargar'|'actualizar'} [accion] paridad con los dos botones del dashboard
+ *   ("Cargar cambios de domicilio" / "Actualizar estado solicitud"): se reenvia tal
+ *   cual a Apps Script (doPost), que decide que hojas/filas procesar. Si se omite u
+ *   es invalido, Apps Script hace la corrida completa (cargar + actualizar), igual
+ *   que el trigger de 15 minutos.
  * @returns {Promise<{status:number, body:object}>}
  */
-export async function ejecutarSincronizacionManual(env, fetchImpl = fetch) {
+export async function ejecutarSincronizacionManual(env, fetchImpl = fetch, accion) {
   if (!env.APPS_SCRIPT_URL) {
     return { status: 503, body: { ok: false, error: 'Sincronizacion manual no configurada (falta APPS_SCRIPT_URL)' } };
   }
@@ -38,12 +45,17 @@ export async function ejecutarSincronizacionManual(env, fetchImpl = fetch) {
   }
   await setConfig(env.DB, CLAVE_ULTIMO_INTENTO_MS, String(ahora));
 
+  const body = { secret: env.IMPORT_SECRET };
+  if (ACCIONES_VALIDAS.has(accion)) {
+    body.accion = accion;
+  }
+
   let respuesta;
   try {
     respuesta = await fetchImpl(env.APPS_SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ secret: env.IMPORT_SECRET }),
+      body: JSON.stringify(body),
       redirect: 'follow',
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });

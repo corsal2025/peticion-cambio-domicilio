@@ -75,3 +75,44 @@ test('sincronizarContactos ignora filas sin comuna, sin correo o con correo inva
   assert.equal(resumen.leidos, 0);
   assert.equal((await listarComunas(db)).length, 0);
 });
+
+// Presupuesto de escritura D1 (ver test/d1WriteBudget.test.js para el mismo
+// presupuesto en peticiones): re-enviar un directorio de ~500 contactos SIN
+// cambios reales no debe reescribir ninguna fila; solo los pares
+// (comuna, correo) nuevos/cambiados deben facturar una escritura.
+test('sincronizarContactos: re-sincronizar 500 contactos sin cambios reales no escribe ninguna fila', async () => {
+  const db = crearD1Fake();
+  const contactos = Array.from({ length: 500 }, (_, i) => ({ comuna: `COMUNA${i}`, email: `contacto${i}@muni.cl` }));
+
+  await sincronizarContactos(db, contactos);
+  db.resetStats();
+
+  const resumen = await sincronizarContactos(db, contactos);
+
+  assert.equal(resumen.nuevos, 0);
+  assert.equal(resumen.actualizados, 500);
+  assert.equal(db.stats().rowsWritten, 0, 're-sincronizar contactos sin cambios no debe escribir ninguna fila');
+});
+
+test('sincronizarContactos: solo los correos NUEVOS entre 500 contactos generan escrituras', async () => {
+  const db = crearD1Fake();
+  const contactos = Array.from({ length: 500 }, (_, i) => ({ comuna: `COMUNA${i}`, email: `contacto${i}@muni.cl` }));
+  await sincronizarContactos(db, contactos);
+  db.resetStats();
+
+  // 3 comunas existentes suman un correo nuevo; el resto no cambia.
+  const conTresNuevos = [
+    ...contactos,
+    { comuna: 'COMUNA0', email: 'nuevo0@muni.cl' },
+    { comuna: 'COMUNA1', email: 'nuevo1@muni.cl' },
+    { comuna: 'COMUNA2', email: 'nuevo2@muni.cl' },
+  ];
+
+  const resumen = await sincronizarContactos(db, conTresNuevos);
+
+  assert.equal(resumen.nuevos, 3);
+  assert.ok(
+    db.stats().rowsWritten <= 3,
+    `se esperaban <= 3 filas escritas (solo las comunas con un correo nuevo), se escribieron ${db.stats().rowsWritten}`,
+  );
+});
