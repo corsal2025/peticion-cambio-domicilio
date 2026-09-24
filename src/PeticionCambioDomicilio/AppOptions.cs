@@ -40,6 +40,16 @@ public sealed class AppOptions
     public string? TestModeEmail { get; set; }
 
     public EwsOptions? Ews { get; set; }
+
+    /// <summary>
+    /// URL base del worker Cloudflare (ej. https://peticion-cambio-domicilio.pages.dev) para el
+    /// modo <c>--relay</c>: este .exe hace polling de <c>/api/relay/pendientes</c> y envia por el
+    /// EWS local, sin exponer Exchange a internet. Vacio = <c>--relay</c> no se puede usar.
+    /// </summary>
+    public string? RelayUrl { get; set; }
+
+    /// <summary>Secreto compartido con el worker para los endpoints /api/relay/* (header X-Relay-Secret).</summary>
+    public string? RelaySecret { get; set; }
 }
 
 public sealed class ColumnMap

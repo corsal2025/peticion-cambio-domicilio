@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Comunas — Cambio de domicilio</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body>
+  <nav class="navbar">
+    <div class="container d-flex justify-content-between align-items-center">
+      <a class="navbar-brand" href="/index.html">
+        <img src="/img/logo-municipal.png" alt="Municipalidad de Valparaíso" />
+      </a>
+      <div class="d-flex align-items-center gap-2">
+        <a class="nav-link" href="/index.html">Peticiones</a>
+        <a class="nav-link active" href="/comunas.html">Comunas</a>
+        <a class="nav-link" href="/estadisticas.html">Estadísticas</a>
+        <a class="nav-link" href="/configuracion.html">Configuración</a>
+      </div>
+    </div>
+  </nav>
+  <main class="container">
+    <h1 class="h4 mb-3">Directorio de comunas</h1>
+
+    <form id="form-import" class="mb-3 d-flex gap-2 align-items-center">
+      <input type="file" id="csv-file" accept=".csv" class="form-control form-control-sm" style="max-width:280px;" />
+      <button type="submit" class="btn btn-sm btn-outline-primary">Importar CSV (nombre,correo)</button>
+      <span id="import-info" class="text-muted" style="font-size:.8rem;"></span>
+    </form>
+
+    <form id="form-alta" class="mb-3 d-flex gap-2">
+      <input name="nombre" placeholder="Nombre comuna" class="form-control form-control-sm" required style="max-width:220px;" />
+      <input name="correos" placeholder="Correo de contacto" class="form-control form-control-sm" style="max-width:260px;" />
+      <button class="btn btn-sm btn-primary">Agregar</button>
+    </form>
+
+    <div class="table-responsive">
+      <table class="table table-striped">
+        <thead><tr><th>Nombre</th><th>Correo</th><th>Contacto</th><th style="width:1%"></th></tr></thead>
+        <tbody id="tbody-comunas"></tbody>
+      </table>
+    </div>
+  </main>
+  <script type="module" src="/js/comunas.js"></script>
+</body>
+</html>

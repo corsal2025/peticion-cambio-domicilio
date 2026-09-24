@@ -143,7 +143,7 @@ public sealed class ConfiguracionModel : PageModel
                 peticiones.Count > 0,
                 peticiones.Count > 0
                     ? $"{peticiones.Count} en total - {enviadas} enviadas, {conError} con error, {sinComuna} sin correo de comuna"
-                    : "Ninguna. Apretar 'Importar / actualizar desde Excel' en Peticiones."),
+                    : "Ninguna. Apretar 'Cargar cambios de domicilio' en Peticiones."),
 
             new("Modo prueba",
                 true,

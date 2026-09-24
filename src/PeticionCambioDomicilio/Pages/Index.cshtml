@@ -58,12 +58,12 @@
 
 <div class="toolbar mb-2">
     <form method="post">
-        <button asp-page-handler="Importar" class="btn btn-sm btn-primary">Importar / actualizar desde Excel</button>
+        <button asp-page-handler="Importar" class="btn btn-sm btn-primary">Cargar cambios de domicilio</button>
     </form>
     <form method="post">
         <button asp-page-handler="ActualizarCarpetas" class="btn btn-sm btn-outline-primary"
                 title="Busca en el libro el estado de la carpeta de cada persona (por RUT) y lo actualiza si figura más avanzado">
-            Actualizar carpetas desde el Excel
+            Actualizar estado solicitud
         </button>
     </form>
     <form method="post" class="js-enviar-marcadas"
@@ -75,6 +75,10 @@
             Enviar marcadas (<span class="js-marcadas-n">@Model.MarcadasPendientes</span>)
         </button>
     </form>
+    <button class="btn btn-sm btn-outline-secondary" type="button"
+            data-bs-toggle="collapse" data-bs-target="#panel-manual" aria-expanded="false" aria-controls="panel-manual">
+        + Petición manual
+    </button>
     <span class="spacer"></span>
     <a href="/Imprimir" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir lista</a>
     <a href="/Imprimir?marcadas=true" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir marcadas</a>
@@ -85,11 +89,54 @@
     </form>
 </div>
 
+@* Carga manual: para personas que la importación automática no trae. Mismas columnas que la tabla. *@
+<div class="collapse mb-3" id="panel-manual">
+    <form method="post" asp-page-handler="AgregarManual">
+        <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>RUT</th>
+                    <th class="text-center">Comuna</th>
+                    <th style="width:1%"></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><input type="text" name="nombre" class="form-control form-control-sm" placeholder="Nombre completo" required /></td>
+                    <td><input type="text" name="rut" class="form-control form-control-sm" placeholder="12.345.678-9" required /></td>
+                    <td>
+                        <select name="comuna" class="form-select form-select-sm" required>
+                            <option value="" selected disabled>Elegir comuna…</option>
+                            @foreach (var c in Model.ComunaNombres)
+                            {
+                                <option value="@c">@c</option>
+                            }
+                        </select>
+                    </td>
+                    <td><button type="submit" class="btn btn-sm btn-primary text-nowrap">Agregar</button></td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+    </form>
+</div>
+
+<div class="d-flex align-items-center gap-2 mb-2">
+    <input type="search" id="buscador" class="form-control form-control-sm" style="max-width:340px;"
+           placeholder="Buscar por RUT o nombre…" autocomplete="off" aria-label="Buscar por RUT o nombre" />
+    <span id="buscador-info" class="text-muted" style="font-size:.75rem;"></span>
+</div>
+
 <div class="table-responsive">
 <table class="table table-hover align-middle">
     <thead>
         <tr>
-            <th class="text-center" style="width:1%">✓</th>
+            <th class="text-center" style="width:1%">
+                <input type="checkbox" id="chk-marcar-todas" title="Marcar / desmarcar todas las pendientes"
+                       checked="@(pendientes > 0 && Model.MarcadasPendientes == pendientes ? "checked" : null)" />
+            </th>
             <th>Nombre</th>
             <th>RUT</th>
             <th class="text-center">Comuna</th>
@@ -139,7 +186,10 @@
             : plazo.Vencido ? "plazo--bad" : plazo.DiasRestantes <= 3 ? "plazo--warn" : "plazo--ok";
         var envioTitulo = !string.IsNullOrEmpty(p.DetalleEstado) ? p.DetalleEstado : null;
 
-        <tr id="fila-@p.Id" class="@claseFila" data-pendiente="@(esEnviada ? "0" : "1")">
+        var rutBusqueda = new string(p.Rut.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+
+        <tr id="fila-@p.Id" class="@claseFila" data-pendiente="@(esEnviada ? "0" : "1")"
+            data-nombre="@TextNormalization.Fold(p.NombreCompleto)" data-rut="@rutBusqueda">
             <td class="text-center">
                 <form method="post" class="d-inline js-marcar" data-id="@p.Id">
                     <input type="hidden" name="id" value="@p.Id" />
@@ -150,7 +200,7 @@
             <td class="dato">@p.NombreCompleto</td>
             <td class="dato num">@p.Rut @(p.RutInvalido ? "⚠" : "")</td>
             <td class="text-center"><span class="comuna-chip">@p.Comuna</span></td>
-            <td class="num">@(p.FechaSolicitud?.ToString("dd-MM-yyyy") ?? "—")</td>
+            <td class="num" title="Fecha en que se pidió la carpeta a la comuna">@(p.EnviadaEn?.LocalDateTime.ToString("dd-MM-yyyy") ?? "— sin pedir")</td>
             <td>
                 @if (p.Estado == EstadoPeticion.Enviada && p.EnviadaEn is not null)
                 {
@@ -285,32 +335,80 @@
         });
     }
 
-    // Marcar/desmarcar sin recargar la pagina.
+    // Marcar/desmarcar sin recargar la pagina. Reutilizable desde el checkbox "marcar todas".
+    function marcarFila(form) {
+        var id = form.dataset.id;
+        var btn = form.querySelector(".js-marcar-btn");
+        var url = form.getAttribute("action") || (location.pathname + "?handler=Marcar");
+        var data = new FormData(form);
+        var token = form.querySelector('input[name="__RequestVerificationToken"]');
+        btn.disabled = true;
+        return fetch(url, {
+            method: "POST",
+            headers: { "X-Requested-With": "fetch", "RequestVerificationToken": token ? token.value : "" },
+            body: data
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+              btn.textContent = res.marcada ? "☑" : "☐";
+              var fila = document.getElementById("fila-" + id);
+              if (fila) {
+                  fila.classList.toggle("fila-marcada", res.marcada);
+                  ajustarContadorMarcadas(fila, res.marcada);
+              }
+          }).catch(function () {
+              form.submit(); // si falla el fetch, envio normal
+          }).finally(function () { btn.disabled = false; });
+    }
+
     document.querySelectorAll("form.js-marcar").forEach(function (form) {
         form.addEventListener("submit", function (ev) {
             ev.preventDefault();
-            var id = form.dataset.id;
-            var btn = form.querySelector(".js-marcar-btn");
-            var url = form.getAttribute("action") || (location.pathname + "?handler=Marcar");
-            var data = new FormData(form);
-            var token = form.querySelector('input[name="__RequestVerificationToken"]');
-            btn.disabled = true;
-            fetch(url, {
-                method: "POST",
-                headers: { "X-Requested-With": "fetch", "RequestVerificationToken": token ? token.value : "" },
-                body: data
-            }).then(function (r) { return r.json(); })
-              .then(function (res) {
-                  btn.textContent = res.marcada ? "☑" : "☐";
-                  var fila = document.getElementById("fila-" + id);
-                  if (fila) {
-                      fila.classList.toggle("fila-marcada", res.marcada);
-                      ajustarContadorMarcadas(fila, res.marcada);
-                  }
-              }).catch(function () {
-                  form.submit(); // si falla el fetch, envio normal
-              }).finally(function () { btn.disabled = false; });
+            marcarFila(form);
         });
     });
+
+    // Checkbox de cabecera: marca/desmarca todas las filas pendientes (las ya enviadas no cuentan).
+    var chkTodas = document.getElementById("chk-marcar-todas");
+    if (chkTodas) {
+        chkTodas.addEventListener("change", function () {
+            var deseada = chkTodas.checked;
+            // Con el buscador activo, solo se marcan las filas visibles.
+            document.querySelectorAll('tr[data-pendiente="1"]:not([hidden]) form.js-marcar').forEach(function (form) {
+                var btn = form.querySelector(".js-marcar-btn");
+                var marcadaActual = btn.textContent.trim() === "☑";
+                if (marcadaActual !== deseada) {
+                    marcarFila(form);
+                }
+            });
+        });
+    }
+
+    // Buscador por RUT o nombre: filtra la tabla en el navegador, sin recargar.
+    // Nombre: sin mayúsculas ni tildes, todas las palabras deben aparecer (en cualquier orden).
+    // RUT: se ignoran puntos, guion y espacios ("12.345.678-9" = "123456789").
+    var buscador = document.getElementById("buscador");
+    if (buscador) {
+        var filas = Array.prototype.slice.call(document.querySelectorAll("tbody tr[data-nombre]"));
+        var info = document.getElementById("buscador-info");
+        var plegar = function (s) {
+            return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+        };
+        var filtrar = function () {
+            var q = plegar(buscador.value);
+            var palabras = q.split(/\s+/).filter(Boolean);
+            var rutQ = q.replace(/[^0-9k]/g, "");
+            var esRut = /\d/.test(q);
+            var visibles = 0;
+            filas.forEach(function (tr) {
+                var ok = palabras.length === 0
+                    || (esRut && rutQ.length > 0 && tr.dataset.rut.indexOf(rutQ) !== -1)
+                    || palabras.every(function (w) { return tr.dataset.nombre.indexOf(w) !== -1; });
+                tr.hidden = !ok;
+                if (ok) visibles++;
+            });
+            info.textContent = palabras.length === 0 ? "" : visibles + " de " + filas.length;
+        };
+        buscador.addEventListener("input", filtrar);
+    }
 </script>
 }

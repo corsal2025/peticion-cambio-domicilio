@@ -1,0 +1,377 @@
+/* ============================================================
+   Petición de Cambio de Domicilio — sistema visual
+   Se carga DESPUÉS de bootstrap.min.css y lo redefine.
+   Tipografía: pila del sistema (Segoe UI en Windows) — no
+   depende de fuentes externas porque la app corre on-premise.
+   ============================================================ */
+
+:root {
+  --canvas: #f4f4f1;
+  --surface: #ffffff;
+  --ink: #23262a;
+  --ink-soft: #5b6067;
+  --ink-faint: #878d95;
+  --line: #e4e3dd;
+  --line-strong: #d3d2ca;
+
+  --accent: #0f5c6b;
+  --accent-hover: #0a3f49;
+  --accent-soft: #e3eef0;
+
+  --ok-ink: #1f7a4d;   --ok-bg: #e7f3ec;   --ok-rail: #2e9c66;   --ok-chip: #d3ead9;
+  --warn-ink: #9a6212; --warn-bg: #fbf0dd;  --warn-rail: #d99513; --warn-chip: #fbe6c4;
+  --bad-ink: #b23636;  --bad-bg: #fbe9e9;   --bad-rail: #d24848;  --bad-chip: #f6d8d8;
+  --mark-ink: #0f5c6b; --mark-bg: #e3eef0;  --mark-rail: #2f8fa3;
+  --done-ink: #1f5a94; --done-bg: #e1ecfa;  --done-rail: #2c6fb0; --done-chip: #cfe0f6;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  font-size: 13.5px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  margin-bottom: 40px;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: -apple-system, "Segoe UI Variable", "Segoe UI", system-ui, Roboto, sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+html { position: relative; min-height: 100%; }
+
+.num, .table .num { font-variant-numeric: tabular-nums; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+.container { max-width: 1420px; }
+
+h1, h2, h3 { letter-spacing: -0.015em; }
+h1.h3 { font-size: 1.35rem; font-weight: 700; }
+h2.h5, h2.h6 { font-weight: 700; }
+
+.btn:focus, .btn:active:focus, .btn-link.nav-link:focus,
+.form-control:focus, .form-check-input:focus {
+  box-shadow: 0 0 0 0.12rem var(--surface), 0 0 0 0.24rem var(--accent);
+}
+
+/* ---------- Cabecera / navegación ---------- */
+.navbar {
+  background: var(--surface) !important;
+  border-bottom: 1px solid var(--line) !important;
+  box-shadow: none !important;
+  padding-top: .55rem;
+  padding-bottom: .55rem;
+  margin-bottom: 0 !important;
+}
+.navbar .container { align-items: center; }
+.navbar-brand {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--ink) !important;
+}
+.navbar-brand img { height: 68px; width: auto; }
+.navbar-brand::after {
+  content: "Dirección de Tránsito";
+  display: block;
+  font-size: .82rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink-faint);
+}
+@media (max-width: 480px) {
+  .navbar-brand img { height: 48px; }
+}
+.navbar-nav { gap: .15rem; }
+.nav-link {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink-soft) !important;
+  border-radius: var(--radius-sm);
+  padding: .45rem .9rem !important;
+}
+.nav-link:hover { background: #f1f1ec; color: var(--ink) !important; }
+.nav-link.active {
+  background: var(--accent-soft);
+  color: var(--accent) !important;
+  font-weight: 600;
+}
+.navbar-text { color: var(--ink-faint) !important; font-size: .72rem; }
+
+/* ---------- Franja de modo (envío real / prueba) ---------- */
+.modo-franja {
+  display: flex; align-items: center; justify-content: center; gap: .5rem;
+  width: 100%;
+  padding: .4rem 1rem;
+  font-weight: 600;
+  font-size: .78rem;
+  letter-spacing: .04em;
+}
+.modo-franja svg { flex-shrink: 0; }
+.modo-franja--real { background: var(--warn-bg); border-bottom: 1px solid #f0ddba; color: var(--warn-ink); }
+.modo-franja--prueba { background: var(--bad-bg); border-bottom: 1px solid #eecccc; color: var(--bad-ink); }
+
+main { padding-top: 1.4rem; }
+
+/* ---------- Mensaje flash ---------- */
+.alert {
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  font-size: .88rem;
+  padding: .7rem .9rem;
+}
+.alert-info { background: var(--accent-soft); border-color: #c9dfe3; color: #0b4653; }
+.alert-warning { background: var(--warn-bg); border-color: #f0ddba; color: var(--warn-ink); }
+.alert-danger { background: var(--bad-bg); border-color: #eecccc; color: var(--bad-ink); }
+
+/* ---------- Tarjetas ---------- */
+.card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: none;
+}
+.card-body { padding: 1.15rem 1.25rem; }
+
+/* ---------- Chips de resumen ---------- */
+.stat-row { display: flex; gap: .5rem; flex-wrap: wrap; }
+.stat-chip {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 76px;
+  padding: .45rem .9rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.stat-chip b { font-size: 1.15rem; font-weight: 700; line-height: 1.1; }
+.stat-chip span {
+  font-size: .64rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-faint);
+}
+.stat-chip--ok b { color: var(--ok-ink); }
+.stat-chip--bad b { color: var(--bad-ink); }
+.stat-chip--soft b { color: var(--ink-soft); }
+
+/* ---------- Barra de acciones ---------- */
+.toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.toolbar .btn { font-size: .82rem; padding: .42rem .8rem; }
+.toolbar .spacer { flex-grow: 1; }
+
+/* ---------- Botones ---------- */
+.btn {
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: .86rem;
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.btn-primary:hover, .btn-primary:focus, .btn-primary:active {
+  background: var(--accent-hover) !important;
+  border-color: var(--accent-hover) !important;
+}
+.btn-outline-primary {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.btn-outline-primary:hover, .btn-outline-primary:active {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+.btn-outline-secondary {
+  color: var(--ink-soft);
+  border-color: var(--line-strong);
+}
+.btn-outline-secondary:hover { background: #f1f1ec !important; color: var(--ink) !important; border-color: var(--line-strong) !important; }
+.btn-success { background: var(--ok-rail); border-color: var(--ok-rail); }
+.btn-outline-danger { color: var(--bad-ink); border-color: transparent; }
+.btn-outline-danger:hover { background: var(--bad-bg) !important; border-color: var(--bad-chip) !important; color: var(--bad-ink) !important; }
+
+/* ---------- Tabla de peticiones ---------- */
+.table-responsive { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.table {
+  font-size: .84rem;
+  border-collapse: collapse;
+  margin-bottom: 0;
+}
+.table > thead > tr > th {
+  font-size: .92rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  color: var(--ink);
+  white-space: nowrap;
+  vertical-align: bottom;
+  text-align: center;
+  background: #f1f1ec;
+  border-bottom: 2px solid var(--line-strong);
+  padding: .6rem .7rem;
+}
+.table > tbody > tr { border-bottom: 1px solid var(--line); }
+.table > tbody > tr:last-child { border-bottom: 0; }
+.table > tbody > tr > td {
+  padding: .6rem .7rem;
+  vertical-align: middle;
+  white-space: nowrap;
+  border: 0;
+  text-align: center;
+}
+/* Nombre (2da columna) queda alineado a la izquierda — es texto largo. */
+.table > tbody > tr > td:nth-child(2) { text-align: left; }
+.table > tbody > tr > td .plazo { margin: 0 auto; }
+.table > tbody > tr > td.dato { font-weight: 600; }
+.table > tbody > tr > td.col-acciones { white-space: nowrap; }
+.table-hover > tbody > tr:hover > td { background: transparent; }
+
+.comuna-chip {
+  display: inline-block;
+  padding: .1rem .45rem;
+  background: #f1f1ec;
+  border-radius: 5px;
+  font-size: .8rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+.table .btn-sm { padding: .18rem .5rem; font-size: .76rem; line-height: 1.35; font-weight: 600; }
+.js-marcar-btn { line-height: 1; font-size: 1.15rem !important; color: var(--ink-faint) !important; }
+.fila-marcada .js-marcar-btn { color: var(--mark-rail) !important; }
+
+/* ---------- Pastillas de estado de envío ---------- */
+.pill {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .1rem .45rem;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pill svg { flex-shrink: 0; }
+.pill--idle { border: 1px solid var(--line-strong); color: var(--ink-soft); background: var(--surface); }
+.pill--ok { color: var(--ok-ink); background: var(--ok-chip); }
+.pill--warn { color: var(--warn-ink); background: var(--warn-chip); }
+.pill--bad { color: var(--bad-ink); background: var(--bad-chip); }
+.pill-time { font-size: .7rem; color: var(--ink-faint); margin-left: .25rem; }
+
+/* ---------- Medidor de plazo ---------- */
+.plazo { display: flex; flex-direction: column; gap: .2rem; min-width: 92px; }
+.plazo-bar { height: 5px; border-radius: 999px; background: #e3e2db; overflow: hidden; }
+.plazo-bar > i { display: block; height: 100%; border-radius: 999px; }
+.plazo-txt { font-size: .72rem; }
+.plazo--ok .plazo-bar > i { background: var(--ok-rail); }   .plazo--ok .plazo-txt { color: var(--ok-ink); }
+.plazo--warn .plazo-bar > i { background: var(--warn-rail); } .plazo--warn .plazo-txt { color: var(--warn-ink); }
+.plazo--bad .plazo-bar > i { background: var(--bad-rail); }   .plazo--bad .plazo-txt { color: var(--bad-ink); font-weight: 600; }
+.plazo--idle .plazo-txt { color: var(--ink-faint); }
+
+/* ---------- Estado de la carpeta (desplegable espejo del Excel) ---------- */
+.carpeta-select {
+  font-size: .78rem;
+  font-weight: 600;
+  text-align: center;
+  text-transform: uppercase;
+  padding: .22rem .45rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  max-width: 200px;
+  cursor: pointer;
+}
+.carpeta-select option { text-align: center; text-transform: uppercase; }
+.carpeta-select:hover { border-color: var(--accent); }
+.carpeta-fecha { font-size: .68rem; font-weight: 600; color: var(--ok-ink); margin-top: .2rem; }
+
+/* ---------- Estados de fila (riel a la izquierda + tinte) ---------- */
+/* El riel va SOLO en la primera celda; si no, se dibujan lineas verticales en cada columna. */
+.table > tbody > tr.fila-pendiente > td:first-child { box-shadow: inset 3px 0 0 var(--line-strong); }
+.table > tbody > tr.fila-pendiente:hover > td { background: #fafaf8 !important; }
+
+.table > tbody > tr.fila-enviada > td { background: var(--ok-bg) !important; }
+.table > tbody > tr.fila-enviada > td:first-child { box-shadow: inset 3px 0 0 var(--ok-rail); }
+.table > tbody > tr.fila-enviada:hover > td { background: #dcecdf !important; }
+
+.table > tbody > tr.fila-sincorreo > td { background: var(--warn-bg) !important; }
+.table > tbody > tr.fila-sincorreo > td:first-child { box-shadow: inset 3px 0 0 var(--warn-rail); }
+
+.table > tbody > tr.fila-error > td { background: var(--bad-bg) !important; }
+.table > tbody > tr.fila-error > td:first-child { box-shadow: inset 3px 0 0 var(--bad-rail); }
+
+.table > tbody > tr.fila-rutinvalido > td { background: var(--warn-bg) !important; }
+.table > tbody > tr.fila-rutinvalido > td:first-child { box-shadow: inset 3px 0 0 var(--warn-rail); }
+
+.table > tbody > tr.fila-marcada > td { background: var(--mark-bg) !important; }
+.table > tbody > tr.fila-marcada > td:first-child { box-shadow: inset 3px 0 0 var(--mark-rail); }
+.table > tbody > tr.fila-marcada:hover > td { background: #d4e7ec !important; }
+
+/* Carpeta subida = proceso terminado: fila azul, al final de la lista. */
+.table > tbody > tr.fila-resuelta > td { background: var(--done-bg) !important; color: var(--done-ink); }
+.table > tbody > tr.fila-resuelta > td:first-child { box-shadow: inset 3px 0 0 var(--done-rail); }
+.table > tbody > tr.fila-resuelta:hover > td { background: #d2e2f6 !important; }
+.table > tbody > tr.fila-resuelta > td.dato { color: var(--done-ink); }
+
+/* ---------- Directorio de comunas / config ---------- */
+.table-striped > tbody > tr:nth-of-type(odd) > td { background: #fafaf8; }
+.badge {
+  font-weight: 600;
+  font-size: .7rem;
+  border-radius: 5px;
+  padding: .22em .5em;
+}
+.badge.bg-success { background: var(--ok-chip) !important; color: var(--ok-ink) !important; }
+.badge.bg-danger { background: var(--bad-chip) !important; color: var(--bad-ink) !important; }
+.badge.bg-warning { background: var(--warn-chip) !important; color: var(--warn-ink) !important; }
+.badge.bg-secondary { background: #ebebe5 !important; color: var(--ink-soft) !important; }
+
+code {
+  background: #f1f1ec;
+  color: var(--accent-hover);
+  padding: .08rem .3rem;
+  border-radius: 4px;
+  font-size: .82em;
+}
+
+/* ---------- Estadísticas: barras ---------- */
+.barra-track {
+  height: 15px;
+  border-radius: 4px;
+  background: #eeede7;
+  overflow: hidden;
+}
+.barra-track > i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+  min-width: 3px;
+}
+.barra-split {
+  display: flex;
+  height: 20px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #eeede7;
+}
+.barra-split > i { display: block; height: 100%; }
+.barra-split .s-ok, .cuadro.s-ok { background: var(--ok-ink); }
+.barra-split .s-bad, .cuadro.s-bad { background: var(--warn-ink); }
+.barra-split .s-idle { background: var(--line-strong); }
+.cuadro {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 3px;
+  margin-right: .35rem;
+  vertical-align: baseline;
+}
+.cuadro.s-idle { background: var(--line-strong); }
+
+pre { font-size: .82rem; }
+
+/* ---------- Boton mostrar/ocultar clave (👁) ---------- */
+.btn-toggle-clave {
+  line-height: 1;
+  padding: .3rem .55rem !important;
+}

@@ -1,0 +1,17 @@
+name = "peticion-cambio-domicilio"
+pages_build_output_dir = "public"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "peticion-cambio-domicilio-db"
+database_id = "31e33b53-48cb-4df0-a21d-005f5322b653"
+migrations_dir = "migrations"
+
+# Variables secretas (SESSION_SECRET, MASTER_PIN, IMPORT_SECRET, RELAY_SECRET,
+# APPS_SCRIPT_URL -- URL del deployment "Aplicacion web" de apps-script/, usada
+# por POST /api/sincronizar -- y si se usa MAIL_MODE=direct: EWS_USER/EWS_PASS)
+# se configuran con `wrangler pages secret put` despues de crear el proyecto
+# Pages. Pages no usa un bloque [vars] en wrangler.toml como los Workers
+# "sueltos".
