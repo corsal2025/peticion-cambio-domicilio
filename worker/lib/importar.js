@@ -10,17 +10,23 @@
 // "desaparecidas" a las de los demas lotes de la misma sincronizacion.
 //
 // Contrato de dos fases:
-//   1) importarFilas(db, filas, {syncId, lote, totalLotes, hojasLeidas}) por
-//      cada lote: solo upsert. Acumula las claves vistas de ese syncId en la
-//      tabla import_vistos y el progreso de lotes en import_lotes. Nunca
-//      borra nada.
-//   2) finalizarImport(db, {syncId, hojasLeidas}) una vez que llegaron TODOS
-//      los lotes anunciados: recien ahi calcula el set completo de claves
-//      vigentes (acumuladas de todos los lotes) y ejecuta la limpieza de
-//      obsoletas, con las mismas guardas de seguridad (payload vacio / 0
-//      hojas leidas / mas del 50% de las Borrador existentes). Si no
-//      llegaron todos los lotes, rechaza sin borrar nada. Limpia el tracking
-//      de ese syncId al terminar (haya borrado o no).
+//   1) importarFilas(db, filas) por cada lote: solo upsert/avance, set-based,
+//      y NUNCA borra nada. Devuelve `clavesCD` (las claves rut|comuna de las
+//      filas exactamente "CAMBIO DE DOMICILIO" de ESE lote); Apps Script
+//      acumula ese arreglo en memoria a lo largo de todos los lotes de la
+//      sincronizacion (es chico: a lo sumo un punado de altas/dia) y lo
+//      manda completo en el POST de finalizar.
+//   2) finalizarImport(db, {clavesCD, hojasLeidas}) una vez enviados TODOS
+//      los lotes: usa ese acumulado (recibido en el body, no releido de una
+//      tabla de tracking) como el set de claves vigentes y ejecuta la
+//      limpieza de obsoletas, con las mismas guardas de seguridad (payload
+//      vacio / 0 hojas leidas / mas del 50% de las Borrador existentes).
+//      Apps Script solo llama a finalizar despues de que TODOS los lotes se
+//      enviaron sin error (si un lote falla, aborta antes de finalizar), asi
+//      que el worker ya no necesita persistir un tracking de progreso de
+//      lotes propio (elimina las escrituras a import_vistos/import_lotes que
+//      antes se hacian en CADA lote — ver incidente 2026-09: agotaban la
+//      cuota diaria de D1 free tier con ~4600 filas cada 15 min).
 //
 // IMPORTANTE (Cloudflare Workers FREE plan): 50 subrequests por invocacion, y
 // D1 cuenta cada .run()/.first()/.all()/.batch() como un subrequest Y limita
@@ -30,6 +36,14 @@
 // se procesa dentro de SQLite via json_each() en un puñado de statements
 // (partidos en varios chunks solo si el JSON supera ~90KB, el limite de
 // tamano de un parametro bindeado en D1). Ver worker/lib/jsonChunk.js.
+//
+// IMPORTANTE (D1 free tier: 100k ROWS WRITTEN/dia, no solo subrequests): los
+// UPSERT/UPDATE de abajo llevan una clausula WHERE para que SQLite/D1 NO
+// cuente como "escrita" (`changes`) una fila cuyo contenido no cambio. Sin
+// eso, un ON CONFLICT DO UPDATE o un UPDATE...FROM reescriben (y facturan)
+// TODAS las filas que matchean, aunque el valor final sea identico al que ya
+// habia — con ~4600 filas cada 15 min eso agota el limite diario en pocas
+// horas aunque el Excel casi no cambie entre corridas.
 import { fold } from './normalizar.js';
 import { normalizar as normalizarEstado, rango, rangoSql, CAMBIO_DE_DOMICILIO } from './estadoCarpeta.js';
 import { chunkPorTamano } from './jsonChunk.js';
@@ -138,6 +152,18 @@ const UPSERT_SQL = `
     estado_carpeta = CASE
       WHEN ${rangoSql('excluded.estado_carpeta')} > ${RANGO_ACTUAL_SQL}
       THEN excluded.estado_carpeta ELSE peticiones.estado_carpeta END
+  -- Presupuesto de escritura D1: no tocar (no facturar) una fila cuando NINGUN
+  -- campo del Excel cambio y el rango tampoco avanza. IS NOT (a diferencia de
+  -- !=) compara bien columnas que pueden ser NULL (clases, fecha_solicitud, etc.).
+  WHERE
+    peticiones.nombre_completo IS NOT excluded.nombre_completo
+    OR peticiones.clases IS NOT excluded.clases
+    OR peticiones.fecha_solicitud IS NOT excluded.fecha_solicitud
+    OR peticiones.oficina IS NOT excluded.oficina
+    OR peticiones.origen IS NOT excluded.origen
+    OR peticiones.orden_importacion IS NOT excluded.orden_importacion
+    OR peticiones.rut_invalido IS NOT excluded.rut_invalido
+    OR ${rangoSql('excluded.estado_carpeta')} > ${RANGO_ACTUAL_SQL}
 `;
 
 // Filas que NO son "CAMBIO DE DOMICILIO" exacto (es_cd = 0) pero traen rango
@@ -164,26 +190,32 @@ const UPDATE_AVANCE_SQL = `
     FROM json_each(?)
   ) AS t
   WHERE peticiones.rut_norm = t.rut_norm AND peticiones.comuna_norm = t.comuna_norm
+    -- Presupuesto de escritura D1: solo tocar la fila si realmente va a
+    -- avanzar de rango, o si va a setear subida_en por primera vez al llegar
+    -- a rango >= 3. Si el rango entrante no supera al actual (re-sincronizar
+    -- el mismo estado de siempre, la inmensa mayoria de las ~4600 filas cada
+    -- 15 min) la fila NO se factura como escrita.
+    AND (
+      ${rangoSql('t.estado_carpeta')} > ${RANGO_ACTUAL_SQL}
+      OR (peticiones.subida_en IS NULL AND ${rangoSql('t.estado_carpeta')} >= 3)
+    )
 `;
 
 /**
  * Procesa UN lote del import: upsert idempotente de sus filas, set-based
- * (una consulta por chunk de tamano, nunca una consulta por fila). No
- * ejecuta limpieza de obsoletas (eso queda para finalizarImport, una vez que
- * se recibieron todos los lotes de la sincronizacion).
+ * (una consulta por chunk de tamano, nunca una consulta por fila, y NINGUNA
+ * fila sin cambios se reescribe — ver WHERE en UPSERT_SQL/UPDATE_AVANCE_SQL).
+ * No ejecuta limpieza de obsoletas (eso queda para finalizarImport, una vez
+ * que se recibieron/procesaron todos los lotes de la sincronizacion).
  *
- * @param {object} [opciones]
- * @param {string} [opciones.syncId] identificador compartido por todos los
- *   lotes de una misma sincronizacion. Si se omite, el lote se procesa (solo
- *   upsert) sin quedar registrado para ningun finalizarImport posterior —
- *   uso pensado para pruebas/scripts puntuales, no para el flujo real de
- *   Apps Script.
- * @param {number} [opciones.lote] numero de lote (informativo).
- * @param {number} [opciones.totalLotes] cantidad total de lotes anunciados
- *   para este syncId; finalizarImport rechaza si no llegaron todos.
- * @param {number} [opciones.hojasLeidas] hojas leidas en el origen; se
- *   recuerda para el finalizarImport que no lo especifique explicitamente.
- * @returns {Promise<{recibidas:number, insertadas:number, actualizadas:number}>}
+ * @param {object} [opciones] sin uso actualmente (se mantiene por compatibilidad
+ *   con llamadores existentes que pasen {hojasLeidas, lote, totalLotes}: se ignoran).
+ * @returns {Promise<{recibidas:number, insertadas:number, actualizadas:number, clavesCD:string[]}>}
+ *   `clavesCD` son las claves (rut_norm|comuna_norm) de las filas exactamente
+ *   "CAMBIO DE DOMICILIO" de ESTE lote. El llamador (Apps Script) las acumula
+ *   en memoria a lo largo de todos los lotes de la sincronizacion y las manda
+ *   completas a finalizarImport — asi el worker no necesita persistir un
+ *   tracking de progreso propio (ver comentario de cabecera del archivo).
  */
 export async function importarFilas(db, filas, opciones = {}) {
   if (filas.length > MAX_FILAS) {
@@ -213,13 +245,6 @@ export async function importarFilas(db, filas, opciones = {}) {
       filasAvance.push(p);
     }
   }
-
-  // Claves que cuentan como "vigentes" para la limpieza de obsoletas de
-  // finalizarImport: las CD (pueden crear) y las de avance (aunque solo
-  // actualicen una existente). Registrar tambien las de avance es la opcion
-  // mas simple y segura: como mucho evita un borrado de una peticion que
-  // sigue viva en el Excel bajo otro estado, nunca causa un borrado indebido.
-  const clavesVistas = [...new Set([...filasCD.map((p) => p.clave), ...filasAvance.map((p) => p.clave)])];
 
   let insertadas = 0;
   let actualizadas = 0;
@@ -268,89 +293,46 @@ export async function importarFilas(db, filas, opciones = {}) {
     for (const r of resultados) actualizadas += r.meta?.changes ?? 0;
   }
 
-  const { syncId } = opciones;
-  if (syncId) {
-    if (clavesVistas.length > 0) {
-      const chunksVistos = chunkPorTamano(clavesVistas);
-      await batch(
-        db,
-        chunksVistos.map((chunk) =>
-          db
-            .prepare("INSERT OR IGNORE INTO import_vistos (sync_id, clave) SELECT ?, value FROM json_each(?)")
-            .bind(syncId, JSON.stringify(chunk)),
-        ),
-      );
-    }
-
-    await db
-      .prepare(
-        `INSERT INTO import_lotes (sync_id, total_lotes, lotes_vistos, hojas_leidas)
-         VALUES (?, ?, 1, ?)
-         ON CONFLICT (sync_id) DO UPDATE SET
-           lotes_vistos = import_lotes.lotes_vistos + 1,
-           total_lotes = COALESCE(excluded.total_lotes, import_lotes.total_lotes),
-           hojas_leidas = COALESCE(excluded.hojas_leidas, import_lotes.hojas_leidas),
-           actualizado_en = datetime('now')`,
-      )
-      .bind(syncId, opciones.totalLotes ?? null, opciones.hojasLeidas ?? null)
-      .run();
-  }
-
-  return { recibidas: filas.length, insertadas, actualizadas };
+  return { recibidas: filas.length, insertadas, actualizadas, clavesCD: filasCD.map((p) => p.clave) };
 }
 
 /**
- * Cierra una sincronizacion identificada por syncId: exige que hayan llegado
- * todos los lotes anunciados y recien ahi ejecuta la limpieza de obsoletas
- * usando el acumulado de claves vistas en TODOS esos lotes. Nunca borra a
+ * Cierra una sincronizacion: ejecuta la limpieza de obsoletas usando el
+ * acumulado de claves CD (`clavesCD`) que el llamador junto a lo largo de
+ * TODOS los lotes de esta sincronizacion (ver importarFilas). Nunca borra a
  * ciegas: mismas guardas que antes (payload/hojas en 0, o mas del 50% de las
- * Borrador existentes) aplicadas sobre el total acumulado.
+ * Borrador existentes).
  *
  * Set-based: el conteo de "cuantas se borrarian" (para el umbral) y el borrado
  * en si se calculan con un puñado de statements, nunca cargando ni iterando
  * fila por fila en JS aunque existan miles de peticiones.
  *
  * @param {object} opciones
- * @param {string} opciones.syncId
- * @param {number} [opciones.hojasLeidas] si se omite, usa el ultimo valor
- *   informado por algun lote de este syncId.
+ * @param {string[]} [opciones.clavesCD] claves (rut_norm|comuna_norm) CD vigentes
+ *   acumuladas de todos los lotes de esta sincronizacion.
+ * @param {number} [opciones.hojasLeidas]
  * @returns {Promise<{eliminadas:number, avisos:string[]}>}
  */
 export async function finalizarImport(db, opciones = {}) {
-  const { syncId } = opciones;
-  if (!syncId) {
-    throw new Error('finalizarImport requiere syncId');
-  }
+  const clavesCD = Array.isArray(opciones.clavesCD) ? opciones.clavesCD : [];
+  const hojasLeidas = opciones.hojasLeidas;
+  const clavesJson = JSON.stringify(clavesCD);
 
-  const progreso = await db.prepare('SELECT * FROM import_lotes WHERE sync_id = ?').bind(syncId).first();
-  if (!progreso) {
-    throw new Error(`syncId "${syncId}" desconocido: no se registro ningun lote para finalizar`);
-  }
-
-  if (progreso.total_lotes == null || progreso.lotes_vistos < progreso.total_lotes) {
-    throw new Error(
-      `finalizar rechazado para syncId "${syncId}": llegaron ${progreso.lotes_vistos} de ` +
-        `${progreso.total_lotes ?? 'un total desconocido de'} lotes anunciados. No se borra nada.`,
-    );
-  }
-
-  const hojasLeidas = opciones.hojasLeidas ?? progreso.hojas_leidas ?? undefined;
-
-  // Un solo statement calcula, de una: cuantas claves vigentes se acumularon
-  // para este syncId, cuantas peticiones Borrador-limpias no-manuales existen
-  // (denominador del umbral) y cuantas de ellas son candidatas a borrado
-  // (numerador). Evita cargar todas las filas a JS para poder contarlas.
+  // Un solo statement calcula, de una: cuantas claves CD vigentes llegaron,
+  // cuantas peticiones Borrador-limpias no-manuales existen (denominador del
+  // umbral) y cuantas de ellas son candidatas a borrado (numerador). Evita
+  // cargar todas las filas a JS para poder contarlas.
   const conteo = await db
     .prepare(
       `SELECT
-         (SELECT COUNT(DISTINCT clave) FROM import_vistos WHERE sync_id = ?) AS vigentes_n,
+         (SELECT COUNT(DISTINCT value) FROM json_each(?)) AS vigentes_n,
          COUNT(*) AS existentes_n,
          SUM(CASE WHEN (rut_norm || '|' || comuna_norm) NOT IN
-           (SELECT clave FROM import_vistos WHERE sync_id = ?) THEN 1 ELSE 0 END) AS candidatas_n
+           (SELECT value FROM json_each(?)) THEN 1 ELSE 0 END) AS candidatas_n
        FROM peticiones
        WHERE (oficina IS NULL OR oficina != 'MANUAL') AND estado = 'Borrador' AND marcada = 0`,
     )
-    .bind(syncId, syncId)
+    .bind(clavesJson, clavesJson)
     .first();
 
   const vigentesN = conteo.vigentes_n ?? 0;
@@ -391,18 +373,13 @@ export async function finalizarImport(db, opciones = {}) {
         .prepare(
           `DELETE FROM peticiones
            WHERE (oficina IS NULL OR oficina != 'MANUAL') AND estado = 'Borrador' AND marcada = 0
-             AND (rut_norm || '|' || comuna_norm) NOT IN (SELECT clave FROM import_vistos WHERE sync_id = ?)`,
+             AND (rut_norm || '|' || comuna_norm) NOT IN (SELECT value FROM json_each(?))`,
         )
-        .bind(syncId)
+        .bind(clavesJson)
         .run();
       eliminadas = meta.changes ?? 0;
     }
   }
-
-  await batch(db, [
-    db.prepare('DELETE FROM import_vistos WHERE sync_id = ?').bind(syncId),
-    db.prepare('DELETE FROM import_lotes WHERE sync_id = ?').bind(syncId),
-  ]);
 
   return { eliminadas, avisos };
 }

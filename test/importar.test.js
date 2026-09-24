@@ -21,9 +21,8 @@ function fila(overrides = {}) {
 
 // Import de un solo lote: upsert + finalizar en la misma sincronizacion.
 async function importarUnLote(db, filas, opciones = {}) {
-  const syncId = opciones.syncId ?? `sync-${Math.random().toString(36).slice(2)}`;
-  const r = await importarFilas(db, filas, { ...opciones, syncId, lote: 1, totalLotes: 1 });
-  const f = await finalizarImport(db, { syncId, hojasLeidas: opciones.hojasLeidas });
+  const r = await importarFilas(db, filas, opciones);
+  const f = await finalizarImport(db, { clavesCD: r.clavesCD, hojasLeidas: opciones.hojasLeidas });
   return { ...r, ...f };
 }
 
@@ -176,7 +175,7 @@ test('el umbral del 50% se calcula solo sobre Borrador limpio, no sobre Enviada/
   assert.ok(r2.avisos.length > 0);
 });
 
-test('import por lotes: la limpieza de obsoletas usa el acumulado de TODOS los lotes, no de uno solo', async () => {
+test('import por lotes: la limpieza de obsoletas usa el acumulado (clavesCD) de TODOS los lotes, no de uno solo', async () => {
   const db = crearD1Fake();
   // Primera sincronizacion completa: 4 filas vigentes en un solo lote.
   await importarUnLote(db, [
@@ -187,54 +186,26 @@ test('import por lotes: la limpieza de obsoletas usa el acumulado de TODOS los l
   ]);
 
   // Segunda sincronizacion: las mismas 4 filas, pero repartidas en 2 lotes de 2.
-  // Si la limpieza corriera por lote (bug original), el lote 1 borraria las 2
-  // filas que solo aparecen en el lote 2 (50%, ademas activaria el umbral).
-  const syncId = 'sync-lotes';
-  const r1 = await importarFilas(
-    db,
-    [
-      fila({ rut: '18.785.387-7', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
-      fila({ rut: '7.654.321-6', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
-    ],
-    { syncId, lote: 1, totalLotes: 2 },
-  );
+  // El llamador (Apps Script) acumula clavesCD de ambos lotes antes de finalizar;
+  // si la limpieza usara solo un lote (bug original), borraria las 2 filas que
+  // solo aparecen en el otro lote (50%, ademas activaria el umbral).
+  const r1 = await importarFilas(db, [
+    fila({ rut: '18.785.387-7', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+    fila({ rut: '7.654.321-6', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+  ]);
   assert.equal(r1.eliminadas, undefined, 'importarFilas (por lote) nunca borra, esa clave no existe en su resultado');
 
-  const r2 = await importarFilas(
-    db,
-    [
-      fila({ rut: '9.876.543-3', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
-      fila({ rut: '11.111.111-1', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
-    ],
-    { syncId, lote: 2, totalLotes: 2 },
-  );
+  const r2 = await importarFilas(db, [
+    fila({ rut: '9.876.543-3', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+    fila({ rut: '11.111.111-1', comuna: 'VALPARAISO', oficina: 'AV. ARGENTINA' }),
+  ]);
   assert.equal(r2.eliminadas, undefined);
 
-  const fin = await finalizarImport(db, { syncId });
+  const fin = await finalizarImport(db, { clavesCD: [...r1.clavesCD, ...r2.clavesCD] });
   assert.equal(fin.eliminadas, 0, 'las 4 claves llegaron repartidas en 2 lotes, ninguna es obsoleta');
 
   const lista = await listarPeticiones(db, {});
   assert.equal(lista.length, 4, 'ningun lote parcial debe haber borrado nada');
-});
-
-test('finalizar rechaza si no llegaron todos los lotes anunciados', async () => {
-  const db = crearD1Fake();
-  const syncId = 'sync-incompleto';
-  await importarFilas(db, [fila({ rut: '18.785.387-7', comuna: 'VALPARAISO' })], {
-    syncId,
-    lote: 1,
-    totalLotes: 2,
-  });
-
-  await assert.rejects(() => finalizarImport(db, { syncId }), /lote/i);
-
-  const lista = await listarPeticiones(db, {});
-  assert.equal(lista.length, 1, 'el upsert del lote 1 se mantiene, solo se rechaza la limpieza');
-});
-
-test('finalizar con syncId desconocido rechaza', async () => {
-  const db = crearD1Fake();
-  await assert.rejects(() => finalizarImport(db, { syncId: 'no-existe' }), /desconocido/i);
 });
 
 // --- Incidente 2026-09: sync real creo 17234 Borrador (esperaba ~5). Causa:

@@ -263,20 +263,40 @@ cualquier excepción no capturada.
 
 **Contrato de import por lotes (relevante si se toca el worker o el script):**
 el libro real tiene ~4400 filas relevantes, así que Apps Script siempre reparte
-el envío en varios `POST /api/import` de hasta `MAX_FILAS_POR_LOTE` (500) filas
-cada uno, todos con el mismo `syncId` (UUID generado por sincronización) más
-`lote`/`totalLotes`. Cada `POST /api/import` **solo hace upsert, nunca borra**.
-Recién al final, después de mandar todos los lotes, Apps Script llama una vez
-a `POST /api/import/finalizar {syncId, hojasLeidas}`, que exige que hayan
-llegado todos los lotes anunciados y ahí sí ejecuta la limpieza de obsoletas
-sobre el acumulado completo de claves (rut|comuna) vistas en esa
-sincronización — nunca sobre un lote aislado. `finalizar` además mantiene las
-mismas guardas de seguridad: si no llegó ninguna clave, si se informó
-`hojasLeidas: 0`, o si la limpieza borraría más del 50% de las peticiones
-Borrador no-manuales existentes, se omite el borrado y se devuelve un aviso en
-vez de tocar la base. El tracking intermedio vive en las tablas D1
-`import_vistos`/`import_lotes` (ver `migrations/0001_init.sql`) y se limpia
-solo al finalizar cada `syncId`.
+el envío en varios `POST /api/import` de hasta `MAX_FILAS_POR_LOTE` (200) filas
+cada uno. Cada `POST /api/import` **solo hace upsert, nunca borra**, y devuelve
+`clavesCD` (las claves `rut_norm|comuna_norm` de las filas exactamente "CAMBIO
+DE DOMICILIO" de ESE lote). Apps Script acumula ese arreglo en memoria a lo
+largo de todos los lotes y, recién al final, llama una vez a `POST
+/api/import/finalizar {clavesCD, hojasLeidas, recibidas, insertadas,
+actualizadas}` con el acumulado completo, que ahí sí ejecuta la limpieza de
+obsoletas sobre ese set — nunca sobre un lote aislado. `finalizar` además
+mantiene las mismas guardas de seguridad: si no llegó ninguna clave, si se
+informó `hojasLeidas: 0`, o si la limpieza borraría más del 50% de las
+peticiones Borrador no-manuales existentes, se omite el borrado y se devuelve
+un aviso en vez de tocar la base. `finalizar` también escribe la **única** fila
+de `sync_log` de toda la sincronización (antes se escribía una por lote).
+Si algún `POST /api/import` de un lote falla, Apps Script lanza y **nunca**
+llega a llamar a `finalizar` — por eso el worker ya no necesita rastrear
+"cuántos lotes llegaron" por su cuenta.
+
+> **Incidente 2026-09 (D1 free tier "exceeded daily row write limit"):** con
+> ~4600 filas relevantes sincronizadas cada 15 min, la versión anterior
+> reescribía (facturaba) TODAS las filas matcheadas en cada corrida aunque no
+> hubiera cambiado nada, además de insertar una fila en `import_vistos` por
+> cada clave vista y una fila en `import_lotes`/`sync_log` por cada lote —
+> eso solo ya agotaba las 100k filas escritas/día del plan free en pocas
+> horas. La corrección: (1) `UPSERT_SQL`/`UPDATE_AVANCE_SQL` en
+> `worker/lib/importar.js` ahora llevan un `WHERE` que hace que SQLite/D1 NO
+> cuente como escrita una fila cuyo contenido no cambió (usando `IS NOT` para
+> comparar bien columnas nulleables) ni cuyo rango no avanza; (2) se eliminó
+> el tracking `import_vistos`/`import_lotes` (migración
+> `migrations/0003_drop_import_tracking.sql`, que dropea ambas tablas — ya
+> no se persiste nada por lote, ver arriba); (3) `sync_log` pasó de una fila
+> por lote a una sola fila por sincronización completa, escrita en
+> `/api/import/finalizar`. Con esto, una re-sincronización sin cambios reales
+> de ~4600 filas escribe a lo sumo un puñado de filas (ver
+> `test/d1WriteBudget.test.js`), en vez de ~4600 + tracking por lote.
 
 **Sincronización de correos de comunas:** en la misma corrida de
 `sincronizarAhora`/`sincronizarProgramada` (la que dispara el trigger cada 15

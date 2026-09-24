@@ -9,7 +9,7 @@ import path from 'node:path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIR_MIGRACIONES = path.join(__dirname, '..', '..', 'migrations');
-const MIGRACIONES = ['0001_init.sql', '0002_normalizar_usuarios.sql'];
+const MIGRACIONES = ['0001_init.sql', '0002_normalizar_usuarios.sql', '0003_drop_import_tracking.sql'];
 
 export function crearD1Fake() {
   const sqlite = new DatabaseSync(':memory:');
@@ -25,7 +25,7 @@ export function crearD1Fake() {
 // batch tambien cuenta contra el limite de 50 queries por invocacion). Ver
 // test/d1SubrequestBudget.test.js.
 function wrap(sqlite) {
-  const stats = { calls: 0, statements: 0 };
+  const stats = { calls: 0, statements: 0, rowsWritten: 0 };
 
   function crearStatement(sql) {
     const stmt = sqlite.prepare(sql);
@@ -39,6 +39,9 @@ function wrap(sqlite) {
       // que ya contabiliza 1 llamada + N statements por su cuenta.
       _runRaw() {
         const info = stmt.run(...boundArgs);
+        // D1's billed "rows written" ~= changes (inserted/updated/deleted rows),
+        // regardless of how many rows a statement scanned/read.
+        stats.rowsWritten += info.changes;
         return { success: true, meta: { last_row_id: Number(info.lastInsertRowid), changes: info.changes } };
       },
       async run() {
@@ -78,11 +81,12 @@ function wrap(sqlite) {
     },
     // --- instrumentacion para tests de presupuesto de subrequests D1 ---
     stats() {
-      return { calls: stats.calls, statements: stats.statements };
+      return { calls: stats.calls, statements: stats.statements, rowsWritten: stats.rowsWritten };
     },
     resetStats() {
       stats.calls = 0;
       stats.statements = 0;
+      stats.rowsWritten = 0;
     },
   };
 }

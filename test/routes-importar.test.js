@@ -44,28 +44,13 @@ test('POST /api/import con secreto valido hace upsert (sin syncId nunca borra po
   assert.equal(resumen.eliminadas, undefined, '/api/import ya no borra: eso lo hace /api/import/finalizar');
 });
 
-test('POST /api/import/finalizar con syncId desconocido responde 409 y no borra', async () => {
-  const db = crearD1Fake();
-  await postImport(db, { filas: [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso', estadoCarpeta: 'CAMBIO DE DOMICILIO' }] });
-
-  const res = await postFinalizar(db, { syncId: 'no-existe' });
-  assert.equal(res.status, 409);
-
-  const { results } = await db.prepare('SELECT * FROM peticiones').all();
-  assert.equal(results.length, 1);
-});
-
-test('POST /api/import/finalizar con filas vacias no borra el Borrador existente y avisa', async () => {
+test('POST /api/import/finalizar con clavesCD vacio y sin hojasLeidas no borra el Borrador existente y avisa', async () => {
   const db = crearD1Fake();
   await postImport(db, {
     filas: [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso', estadoCarpeta: 'CAMBIO DE DOMICILIO' }],
-    syncId: 's1',
-    lote: 1,
-    totalLotes: 1,
   });
 
-  await postImport(db, { filas: [], syncId: 's2', lote: 1, totalLotes: 1 });
-  const res = await postFinalizar(db, { syncId: 's2' });
+  const res = await postFinalizar(db, { clavesCD: [] });
   assert.equal(res.status, 200);
   const resumen = await res.json();
   assert.equal(resumen.eliminadas, 0);
@@ -75,30 +60,29 @@ test('POST /api/import/finalizar con filas vacias no borra el Borrador existente
   assert.equal(results.length, 1, 'la peticion previa no debe borrarse por un payload vacio');
 });
 
-test('POST /api/import/finalizar rechaza si faltan lotes por llegar', async () => {
+test('POST /api/import/finalizar con filas vacias no borra el Borrador existente y avisa', async () => {
   const db = crearD1Fake();
   await postImport(db, {
     filas: [{ nombreCompleto: 'Juan', rut: '18785387-7', comuna: 'Valparaiso', estadoCarpeta: 'CAMBIO DE DOMICILIO' }],
-    syncId: 's3',
-    lote: 1,
-    totalLotes: 2,
   });
+  await postFinalizar(db, { clavesCD: ['18785387-7|VALPARAISO'.toUpperCase()] });
 
-  const res = await postFinalizar(db, { syncId: 's3' });
-  assert.equal(res.status, 409);
+  await postImport(db, { filas: [] });
+  const res = await postFinalizar(db, { clavesCD: [] });
+  assert.equal(res.status, 200);
+  const resumen = await res.json();
+  assert.equal(resumen.eliminadas, 0);
+  assert.ok(Array.isArray(resumen.avisos) && resumen.avisos.length > 0);
 
   const { results } = await db.prepare('SELECT * FROM peticiones').all();
-  assert.equal(results.length, 1, 'el upsert del lote que si llego se mantiene');
+  assert.equal(results.length, 1, 'la peticion previa no debe borrarse por un payload vacio');
 });
 
-test('sincronizacion en 2 lotes: finalizar limpia obsoletas usando el acumulado de ambos, no de uno solo', async () => {
+test('sincronizacion en 2 lotes: finalizar limpia obsoletas usando el acumulado (clavesCD) de ambos, no de uno solo', async () => {
   const db = crearD1Fake();
 
   // Sincronizacion inicial completa (un solo lote), 4 filas vigentes.
-  await postImport(db, {
-    syncId: 'inicial',
-    lote: 1,
-    totalLotes: 1,
+  const inicial = await postImport(db, {
     filas: [
       { nombreCompleto: 'A', rut: '18785387-7', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
       { nombreCompleto: 'B', rut: '7654321-6', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
@@ -106,31 +90,27 @@ test('sincronizacion en 2 lotes: finalizar limpia obsoletas usando el acumulado 
       { nombreCompleto: 'D', rut: '11111111-1', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
     ],
   });
-  await postFinalizar(db, { syncId: 'inicial' });
+  const claveInicial = (await inicial.json()).clavesCD;
+  await postFinalizar(db, { clavesCD: claveInicial });
 
   // Segunda sincronizacion: las mismas 4 filas repartidas en 2 lotes de 2.
-  await postImport(db, {
-    syncId: 'sync-2-lotes',
-    lote: 1,
-    totalLotes: 2,
+  const lote1 = await postImport(db, {
     hojasLeidas: 3,
     filas: [
       { nombreCompleto: 'A', rut: '18785387-7', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
       { nombreCompleto: 'B', rut: '7654321-6', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
     ],
   });
-  await postImport(db, {
-    syncId: 'sync-2-lotes',
-    lote: 2,
-    totalLotes: 2,
+  const lote2 = await postImport(db, {
     hojasLeidas: 3,
     filas: [
       { nombreCompleto: 'C', rut: '9876543-3', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
       { nombreCompleto: 'D', rut: '11111111-1', comuna: 'Valparaiso', oficina: 'AV. ARGENTINA', estadoCarpeta: 'CAMBIO DE DOMICILIO' },
     ],
   });
+  const clavesCD = [...(await lote1.json()).clavesCD, ...(await lote2.json()).clavesCD];
 
-  const res = await postFinalizar(db, { syncId: 'sync-2-lotes' });
+  const res = await postFinalizar(db, { clavesCD, hojasLeidas: 3 });
   assert.equal(res.status, 200);
   const resumen = await res.json();
   assert.equal(resumen.eliminadas, 0, 'ninguna fila desaparecio realmente, solo estaban repartidas en 2 lotes');

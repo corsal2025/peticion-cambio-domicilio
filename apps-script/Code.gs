@@ -334,27 +334,34 @@ function sincronizarLibro_(workerUrl, importSecret, libro) {
   }
 
   var lotes = partirEnLotes_(extraido.filas, CONFIG.MAX_FILAS_POR_LOTE);
-  var syncId = Utilities.getUuid();
   var recibidas = 0, insertadas = 0, actualizadas = 0;
+  var clavesCD = [];
 
   // Cada lote SOLO hace upsert (el worker nunca borra dentro de /api/import).
   // El libro real tiene miles de filas relevantes, asi que casi siempre hay
   // mas de un lote; la limpieza de obsoletas se decide una unica vez al
-  // final, con el acumulado de TODOS los lotes de este syncId.
+  // final, con el acumulado de las claves CD de TODOS los lotes. Ese
+  // acumulado viaja en memoria aca (nunca se persiste lote a lote en el
+  // worker: ver worker/lib/importar.js), y si un enviarLote_ falla, esta
+  // funcion lanza y finalizarImport_ NUNCA se llama, asi que el worker no
+  // necesita rastrear "cuantos lotes llegaron" por su cuenta.
   for (var i = 0; i < lotes.length; i++) {
-    var respuesta = enviarLote_(workerUrl, importSecret, {
-      syncId: syncId,
-      lote: i + 1,
-      totalLotes: lotes.length,
-      hojasLeidas: extraido.hojasLeidas,
-      filas: lotes[i],
-    });
+    var respuesta = enviarLote_(workerUrl, importSecret, { filas: lotes[i] });
     recibidas += respuesta.recibidas || 0;
     insertadas += respuesta.insertadas || 0;
     actualizadas += respuesta.actualizadas || 0;
+    if (respuesta.clavesCD && respuesta.clavesCD.length) {
+      clavesCD = clavesCD.concat(respuesta.clavesCD);
+    }
   }
 
-  var final = finalizarImport_(workerUrl, importSecret, syncId, extraido.hojasLeidas);
+  var final = finalizarImport_(workerUrl, importSecret, {
+    clavesCD: clavesCD,
+    hojasLeidas: extraido.hojasLeidas,
+    recibidas: recibidas,
+    insertadas: insertadas,
+    actualizadas: actualizadas,
+  });
   if (final.error) {
     extraido.avisos.push('Finalizar import fallo: ' + final.error);
   } else if (final.avisos && final.avisos.length) {
@@ -487,17 +494,18 @@ function enviarLote_(workerUrl, importSecret, payload) {
 }
 
 /**
- * Cierra la sincronizacion syncId: recien aca el worker decide si limpia
- * obsoletas, usando el acumulado de todos los lotes enviados. Se llama SIEMPRE
- * despues de mandar todos los lotes (incluso si hubo 1 solo lote).
+ * Cierra la sincronizacion: recien aca el worker decide si limpia obsoletas,
+ * usando el acumulado de claves CD de todos los lotes enviados. Se llama
+ * SIEMPRE despues de mandar todos los lotes (incluso si hubo 1 solo lote), y
+ * NUNCA si algun enviarLote_ fallo antes (lanza y corta el flujo).
  */
-function finalizarImport_(workerUrl, importSecret, syncId, hojasLeidas) {
+function finalizarImport_(workerUrl, importSecret, datos) {
   var url = workerUrl.replace(/\/+$/, '') + '/api/import/finalizar';
   var respuesta = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
     headers: { 'X-Import-Secret': importSecret },
-    payload: JSON.stringify({ syncId: syncId, hojasLeidas: hojasLeidas }),
+    payload: JSON.stringify(datos),
     muteHttpExceptions: true,
   });
 
