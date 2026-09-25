@@ -22,7 +22,7 @@ $shortcut = $shell.CreateShortcut($shortcutPath)
 $shortcut.TargetPath = $launcher
 $shortcut.WorkingDirectory = $root
 $shortcut.Description = "Dashboard version Cloudflare corriendo en local"
-$shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,13"
+$shortcut.IconLocation = (Join-Path $root "src\PeticionCambioDomicilio\logo-municipal.ico") + ",0"
 $shortcut.Save()
 
 Write-Host "Acceso directo creado en: $shortcutPath" -ForegroundColor Green
