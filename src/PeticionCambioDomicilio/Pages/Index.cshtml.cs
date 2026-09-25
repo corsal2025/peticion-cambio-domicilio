@@ -54,6 +54,9 @@ public sealed class IndexModel : PageModel
     /// <summary>Marcadas (columna ✓) que todavía no se enviaron — para el botón "Enviar marcadas (N)".</summary>
     public int MarcadasPendientes { get; private set; }
 
+    /// <summary>Todas las filas marcadas (enviadas o no) — para el botón "Borrar selección (N)".</summary>
+    public int MarcadasTotal { get; private set; }
+
     /// <summary>Comunas del directorio, para el desplegable de carga manual.</summary>
     public IReadOnlyList<string> ComunaNombres { get; private set; } = Array.Empty<string>();
 
@@ -69,6 +72,7 @@ public sealed class IndexModel : PageModel
             .GroupBy(p => p.Comuna, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
         MarcadasPendientes = Peticiones.Count(p => p.Marcada && EsPendiente(p));
+        MarcadasTotal = Peticiones.Count(p => p.Marcada);
         ComunaNombres = _directory.ComunaNames();
     }
 
@@ -235,6 +239,14 @@ public sealed class IndexModel : PageModel
             return new JsonResult(new { marcada });
         }
 
+        return RedirectToPage();
+    }
+
+    /// <summary>Borrar selección: desmarca de una vez todas las casillas marcadas. No borra datos.</summary>
+    public IActionResult OnPostDesmarcarTodas()
+    {
+        var n = _repository.DesmarcarTodas();
+        TempData["Flash"] = $"Se desmarcaron {n} petición(es).";
         return RedirectToPage();
     }
 

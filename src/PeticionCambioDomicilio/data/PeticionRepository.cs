@@ -367,6 +367,15 @@ public sealed class PeticionRepository
         return result is not null && Convert.ToInt64(result) == 1;
     }
 
+    /// <summary>Quita la marca de TODAS las filas marcadas. Devuelve cuantas se desmarcaron.</summary>
+    public int DesmarcarTodas()
+    {
+        using var cn = Open();
+        using var cmd = cn.CreateCommand();
+        cmd.CommandText = "UPDATE Peticion SET Marcada = 0 WHERE Marcada = 1;";
+        return cmd.ExecuteNonQuery();
+    }
+
     public void Delete(long id)
     {
         using var cn = Open();

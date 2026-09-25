@@ -14,8 +14,11 @@
         <nav class="navbar navbar-expand-sm navbar-light bg-white border-bottom mb-0">
             <div class="container">
                 <a class="navbar-brand d-flex align-items-center gap-2" asp-page="/Index">
-                    <img src="~/img/logo-municipal.png" alt="Municipalidad de Valparaíso" height="36" />
-                    Cambio de Domicilio
+                    <img src="~/img/logo-municipal.png" alt="Municipalidad de Valparaíso" height="84" />
+                    <span class="brand-text">
+                        <span class="brand-title">Cambio de Domicilio</span>
+                        <span class="brand-sub">Depto. Licencias de Conducir · Municipalidad de Valparaíso</span>
+                    </span>
                 </a>
                 @{
                     var pagina = ViewContext.RouteData.Values["page"]?.ToString() ?? "";
