@@ -20,6 +20,8 @@ const btnCargar = document.getElementById('btn-cargar');
 const btnActualizarEstado = document.getElementById('btn-actualizar-estado');
 const ultimaSincronizacionEl = document.getElementById('ultima-sincronizacion');
 const nMarcadas = document.getElementById('n-marcadas');
+const btnBorrarSeleccion = document.getElementById('btn-borrar-seleccion');
+const nSeleccion = document.getElementById('n-seleccion');
 const chkTodas = document.getElementById('chk-marcar-todas');
 const mensaje = document.getElementById('mensaje');
 
@@ -125,6 +127,10 @@ function actualizarResumen() {
   const marcadas = peticiones.filter((p) => p.marcada && p.estado !== 'Enviada').length;
   nMarcadas.textContent = marcadas;
   btnEnviar.disabled = marcadas === 0;
+
+  const seleccionadas = peticiones.filter((p) => p.marcada).length;
+  nSeleccion.textContent = seleccionadas;
+  btnBorrarSeleccion.disabled = seleccionadas === 0;
 }
 
 function aplicarFiltro() {
@@ -201,15 +207,16 @@ chkTodas.addEventListener('change', async () => {
 
 btnEnviar.addEventListener('click', async () => {
   if (!confirm('Se envía UN correo por comuna con las personas MARCADAS de esa comuna. ¿Continuar?')) return;
+  const etiquetaEnviar = btnEnviar.querySelector('span');
   btnEnviar.disabled = true;
-  btnEnviar.textContent = 'Enviando… puede tardar unos segundos';
+  etiquetaEnviar.textContent = 'Enviando… puede tardar unos segundos';
   try {
     const resumen = await api('/api/peticiones/enviar', { method: 'POST' });
     mostrarMensaje(`Encolados ${resumen.encolados} correo(s)${resumen.sinCorreo ? `; ${resumen.sinCorreo} comuna(s) sin correo` : ''}.`, 'info');
   } catch (err) {
     mostrarMensaje(err.message, 'danger');
   } finally {
-    btnEnviar.textContent = 'Enviar marcadas (0)';
+    etiquetaEnviar.textContent = 'Enviar marcadas';
     await cargar();
   }
 });
@@ -222,9 +229,11 @@ btnEnviar.addEventListener('click', async () => {
  * el mismo POST /api/sincronizar, que reenvia `accion` a Apps Script.
  */
 async function ejecutarSincronizacion(boton, accion, textoEnCurso) {
-  const textoOriginal = boton.textContent;
+  // Solo se cambia la etiqueta: el icono SVG del boton se conserva.
+  const etiqueta = boton.querySelector('span') || boton;
+  const textoOriginal = etiqueta.textContent;
   boton.disabled = true;
-  boton.textContent = textoEnCurso;
+  etiqueta.textContent = textoEnCurso;
   try {
     const resultado = await api('/api/sincronizar', { method: 'POST', body: JSON.stringify({ accion }) });
     if (resultado.enCurso) {
@@ -244,9 +253,25 @@ async function ejecutarSincronizacion(boton, accion, textoEnCurso) {
     mostrarMensaje(err.message, 'danger');
   } finally {
     boton.disabled = false;
-    boton.textContent = textoOriginal;
+    etiqueta.textContent = textoOriginal;
   }
 }
+
+// Borrar seleccion: desmarca de una vez TODAS las casillas marcadas (visibles o no).
+btnBorrarSeleccion.addEventListener('click', async () => {
+  const ids = peticiones.filter((p) => p.marcada).map((p) => p.id);
+  if (ids.length === 0) return;
+  if (!confirm(`Se desmarcarán ${ids.length} casilla(s) seleccionada(s). ¿Continuar?`)) return;
+  btnBorrarSeleccion.disabled = true;
+  try {
+    await api('/api/peticiones/marcar-todas', { method: 'POST', body: JSON.stringify({ ids, marcada: false }) });
+    chkTodas.checked = false;
+    await cargar();
+  } catch (err) {
+    mostrarMensaje(err.message, 'danger');
+    actualizarResumen();
+  }
+});
 
 btnCargar.addEventListener('click', () => ejecutarSincronizacion(btnCargar, 'cargar', 'Cargando…'));
 btnActualizarEstado.addEventListener('click', () => ejecutarSincronizacion(btnActualizarEstado, 'actualizar', 'Actualizando…'));
