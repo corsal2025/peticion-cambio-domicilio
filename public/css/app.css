@@ -537,3 +537,12 @@ pre { font-size: .82rem; }
 }
 .table > thead input[type="checkbox"] { accent-color: var(--brand-cyan); }
 .chk-marcar { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+/* Sin separadores verticales heredados de Bootstrap en el encabezado. */
+.table > thead > tr > th { border-left: 0; border-right: 0; border-top: 0; box-shadow: none; }
+@media (max-width: 768px) {
+  /* Menu en varias lineas: evita scroll horizontal en pantallas angostas. */
+  .navbar .container > div { flex-wrap: wrap; }
+  .nav-link { font-size: .85rem; padding: .35rem .65rem !important; }
+  .toolbar .divider { display: none; }
+  .navbar { position: static; }
+}
