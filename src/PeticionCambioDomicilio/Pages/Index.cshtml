@@ -9,10 +9,10 @@
     var vencidas = Model.Peticiones.Count(p => PlazoInfo.Para(p).Vencido);
 }
 
-<div class="d-flex align-items-end justify-content-between flex-wrap gap-3 mb-3">
+<div class="page-head">
     <div>
-        <h1 class="h3 mb-1">Peticiones de cambio de domicilio</h1>
-        <div class="text-muted" style="font-size:.8rem;">Flujo saliente · Decreto 170, art. 14 · plazo legal 15 días hábiles</div>
+        <h1 class="h3">Peticiones de cambio de domicilio</h1>
+        <div class="sub">Flujo saliente · Decreto 170, art. 14 · plazo legal 15 días hábiles</div>
     </div>
     <div class="stat-row">
         <div class="stat-chip"><b class="num">@total</b><span>Total</span></div>
@@ -58,30 +58,40 @@
 
 <div class="toolbar mb-2">
     <form method="post">
-        <button asp-page-handler="Importar" class="btn btn-sm btn-primary">Cargar cambios de domicilio</button>
+        <button asp-page-handler="Importar" class="btn btn-sm btn-primary"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Cargar cambios de domicilio</span></button>
     </form>
     <form method="post">
         <button asp-page-handler="ActualizarCarpetas" class="btn btn-sm btn-outline-primary"
                 title="Busca en el libro el estado de la carpeta de cada persona (por RUT) y lo actualiza si figura más avanzado">
-            Actualizar estado solicitud
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-4M4 4v4h4M4 13a8 8 0 0 0 14.9 4M20 20v-4h-4"/></svg><span>Actualizar estado solicitud</span>
         </button>
     </form>
+    <span class="divider"></span>
     <form method="post" class="js-enviar-marcadas"
           onsubmit="return confirm('Se envía UN correo por comuna con las personas MARCADAS (✓) de esa comuna@(Model.ModoPruebaEmail is null ? "" : " (MODO PRUEBA: nada llega a las municipalidades)"). ¿Continuar?');">
         <button asp-page-handler="EnviarMarcadas" id="btn-enviar-marcadas"
-                class="btn btn-sm btn-outline-primary"
+                class="btn btn-sm btn-primary"
                 data-count="@Model.MarcadasPendientes"
                 disabled="@(Model.MarcadasPendientes == 0 ? "disabled" : null)">
-            Enviar marcadas (<span class="js-marcadas-n">@Model.MarcadasPendientes</span>)
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4 20-7z"/></svg><span class="js-enviar-label">Enviar marcadas</span> <span class="badge-count js-marcadas-n">@Model.MarcadasPendientes</span>
+        </button>
+    </form>
+    <form method="post" class="js-borrar-seleccion"
+          onsubmit="return confirm('Se desmarcarán todas las casillas seleccionadas. ¿Continuar?');">
+        <button asp-page-handler="DesmarcarTodas" id="btn-borrar-seleccion"
+                class="btn btn-sm btn-outline-danger" title="Desmarca todas las casillas seleccionadas"
+                data-count="@Model.MarcadasTotal"
+                disabled="@(Model.MarcadasTotal == 0 ? "disabled" : null)">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"/></svg><span>Borrar selección</span> <span class="badge-count js-seleccion-n">@Model.MarcadasTotal</span>
         </button>
     </form>
     <button class="btn btn-sm btn-outline-secondary" type="button"
             data-bs-toggle="collapse" data-bs-target="#panel-manual" aria-expanded="false" aria-controls="panel-manual">
-        + Petición manual
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Petición manual</span>
     </button>
     <span class="spacer"></span>
-    <a href="/Imprimir" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir lista</a>
-    <a href="/Imprimir?marcadas=true" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir marcadas</a>
+    <a href="/Imprimir" target="_blank" class="btn btn-sm btn-outline-secondary"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/></svg><span>Imprimir lista</span></a>
+    <a href="/Imprimir?marcadas=true" target="_blank" class="btn btn-sm btn-outline-secondary"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/></svg><span>Imprimir marcadas</span></a>
     <form method="post" onsubmit="return confirm('¿BORRAR las @Model.Peticiones.Count peticiones cargadas? Esto borra también el HISTORIAL DE ENVÍO (qué se mandó y cuándo). Se guarda un respaldo automático de la base antes. El Excel NO se toca.');">
         <button asp-page-handler="BorrarTodo" class="btn btn-sm btn-outline-danger" disabled="@(Model.Peticiones.Count == 0 ? "disabled" : null)">
             Borrar todos los datos
@@ -325,13 +335,24 @@
         btn.disabled = n === 0;
     }
 
+    // Contador del botón "Borrar selección (N)": cuenta TODAS las filas marcadas.
+    function ajustarContadorSeleccion(marcada) {
+        var btn = document.getElementById("btn-borrar-seleccion");
+        if (!btn) return;
+        var n = Math.max(0, (parseInt(btn.dataset.count, 10) || 0) + (marcada ? 1 : -1));
+        btn.dataset.count = n;
+        var span = btn.querySelector(".js-seleccion-n");
+        if (span) span.textContent = n;
+        btn.disabled = n === 0;
+    }
+
     // Feedback al enviar marcadas: puede tardar (una pausa entre comunas). Evita el doble clic.
     var formEnviar = document.querySelector("form.js-enviar-marcadas");
     if (formEnviar) {
         formEnviar.addEventListener("submit", function (ev) {
             if (ev.defaultPrevented) return; // el confirm() se canceló
             var b = document.getElementById("btn-enviar-marcadas");
-            if (b) { b.disabled = true; b.textContent = "Enviando… puede tardar unos segundos"; }
+            if (b) { b.disabled = true; var l = b.querySelector(".js-enviar-label"); if (l) l.textContent = "Enviando… puede tardar unos segundos"; }
         });
     }
 
@@ -354,6 +375,7 @@
               if (fila) {
                   fila.classList.toggle("fila-marcada", res.marcada);
                   ajustarContadorMarcadas(fila, res.marcada);
+                  ajustarContadorSeleccion(res.marcada);
               }
           }).catch(function () {
               form.submit(); // si falla el fetch, envio normal
