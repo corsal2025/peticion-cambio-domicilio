@@ -15,7 +15,7 @@ if (-not (Test-Path $launcher)) {
 }
 
 $desktopPath = [Environment]::GetFolderPath("Desktop")
-$shortcutPath = Join-Path $desktopPath "Peticion Cambio Domicilio - Cloud local.lnk"
+$shortcutPath = Join-Path $desktopPath "Peticion Cambio Domicilio - Dashboard.lnk"
 
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)
