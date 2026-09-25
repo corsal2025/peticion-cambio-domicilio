@@ -24,10 +24,10 @@
   </nav>
 
   <main class="container">
-    <div class="d-flex align-items-end justify-content-between flex-wrap gap-3 mb-3">
+    <div class="page-head">
       <div>
-        <h1 class="h3 mb-1">Peticiones de cambio de domicilio</h1>
-        <div class="text-muted" style="font-size:.8rem;">Flujo saliente · Decreto 170, art. 14 · plazo legal 15 días hábiles</div>
+        <h1 class="h3">Peticiones de cambio de domicilio</h1>
+        <div class="sub">Flujo saliente · Decreto 170, art. 14 · plazo legal 15 días hábiles</div>
       </div>
       <div class="stat-row">
         <div class="stat-chip"><b class="num" id="stat-total">0</b><span>Total</span></div>
@@ -43,21 +43,36 @@
 
     <div class="toolbar mb-2">
       <button id="btn-cargar" class="btn btn-sm btn-primary" type="button">
-        Cargar cambios de domicilio
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <span>Cargar cambios de domicilio</span>
       </button>
       <button id="btn-actualizar-estado" class="btn btn-sm btn-outline-primary" type="button">
-        Actualizar estado solicitud
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-4M4 4v4h4M4 13a8 8 0 0 0 14.9 4M20 20v-4h-4"/></svg>
+        <span>Actualizar estado solicitud</span>
       </button>
-      <button id="btn-enviar-marcadas" class="btn btn-sm btn-outline-primary" disabled>
-        Enviar marcadas (<span id="n-marcadas">0</span>)
+      <span class="divider"></span>
+      <button id="btn-enviar-marcadas" class="btn btn-sm btn-primary" type="button" disabled>
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4 20-7z"/></svg>
+        <span>Enviar marcadas</span> <span class="badge-count" id="n-marcadas">0</span>
+      </button>
+      <button id="btn-borrar-seleccion" class="btn btn-sm btn-outline-danger" type="button" disabled title="Desmarca todas las casillas seleccionadas">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"/></svg>
+        <span>Borrar selección</span> <span class="badge-count" id="n-seleccion">0</span>
       </button>
       <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#panel-manual">
-        + Petición manual
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span>Petición manual</span>
       </button>
       <span class="spacer"></span>
       <span id="ultima-sincronizacion" class="text-muted" style="font-size:.75rem;"></span>
-      <a href="/imprimir.html" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir lista</a>
-      <a href="/imprimir.html?marcadas=true" target="_blank" class="btn btn-sm btn-outline-secondary">Imprimir marcadas</a>
+      <a href="/imprimir.html" target="_blank" class="btn btn-sm btn-outline-secondary">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/></svg>
+        <span>Imprimir lista</span>
+      </a>
+      <a href="/imprimir.html?marcadas=true" target="_blank" class="btn btn-sm btn-outline-secondary">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/></svg>
+        <span>Imprimir marcadas</span>
+      </a>
     </div>
 
     <div class="collapse mb-3" id="panel-manual">

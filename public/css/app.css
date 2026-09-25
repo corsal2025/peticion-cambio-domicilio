@@ -14,9 +14,17 @@
   --line: #e4e3dd;
   --line-strong: #d3d2ca;
 
-  --accent: #0f5c6b;
-  --accent-hover: #0a3f49;
-  --accent-soft: #e3eef0;
+  /* Paleta tomada del logo municipal (azul marino + acentos). */
+  --accent: #26388c;
+  --accent-hover: #1a2766;
+  --accent-soft: #e6e9f6;
+  --brand-cyan: #1fb5d9;
+  --brand-green: #2fb56a;
+  --brand-pink: #e889c4;
+  --brand-yellow: #f6d23c;
+  --brand-red: #e8503f;
+  --shadow-sm: 0 1px 2px rgba(20, 30, 70, .06), 0 1px 3px rgba(20, 30, 70, .08);
+  --shadow-md: 0 4px 14px rgba(20, 30, 70, .10);
 
   --ok-ink: #1f7a4d;   --ok-bg: #e7f3ec;   --ok-rail: #2e9c66;   --ok-chip: #d3ead9;
   --warn-ink: #9a6212; --warn-bg: #fbf0dd;  --warn-rail: #d99513; --warn-chip: #fbe6c4;
@@ -374,4 +382,167 @@ pre { font-size: .82rem; }
 .btn-toggle-clave {
   line-height: 1;
   padding: .3rem .55rem !important;
+}
+
+/* ============================================================
+   Refresco visual: cabecera institucional + botones
+   ============================================================ */
+
+/* Franja multicolor con la paleta del logo sobre la cabecera. */
+.navbar {
+  position: sticky; top: 0; z-index: 1020;
+  padding-top: .8rem !important;
+  padding-bottom: .8rem !important;
+  box-shadow: var(--shadow-sm) !important;
+  border-top: 0 !important;
+}
+.navbar::before {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 0;
+  height: 5px;
+  background: linear-gradient(90deg,
+    var(--accent) 0 30%, var(--brand-cyan) 30% 45%, var(--brand-green) 45% 60%,
+    var(--brand-yellow) 60% 72%, var(--brand-pink) 72% 86%, var(--brand-red) 86% 100%);
+}
+.navbar-brand {
+  display: flex; align-items: center; gap: 1rem;
+  padding: .25rem 0;
+}
+.navbar-brand img {
+  height: 84px;
+  transition: transform .2s ease;
+}
+.navbar-brand:hover { text-decoration: none; }
+.navbar-brand:hover img { transform: scale(1.03); }
+.navbar-brand::after {
+  content: "Dirección de Tránsito";
+  display: block;
+  padding-left: 1rem;
+  border-left: 3px solid var(--brand-cyan);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--accent);
+  letter-spacing: .01em;
+}
+@media (max-width: 768px) {
+  .navbar .container { flex-wrap: wrap; gap: .5rem; }
+  .navbar-brand img { height: 56px; }
+  .navbar-brand::after { font-size: .85rem; }
+}
+
+/* Navegación tipo pestaña con subrayado activo. */
+.nav-link {
+  position: relative;
+  font-size: .95rem;
+  color: var(--ink-soft) !important;
+  transition: background .15s ease, color .15s ease;
+}
+.nav-link:hover { background: var(--accent-soft); color: var(--accent) !important; text-decoration: none; }
+.nav-link.active {
+  background: var(--accent) !important;
+  color: #fff !important;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Encabezado de página como tarjeta con acento lateral. */
+.page-head {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
+  padding: 1.1rem 1.35rem;
+  margin-bottom: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.page-head h1 { color: var(--accent); margin: 0 0 .15rem; font-size: 1.5rem !important; font-weight: 800; }
+.page-head .sub { font-size: .82rem; color: var(--ink-faint); }
+
+.stat-chip {
+  min-width: 92px;
+  padding: .55rem 1rem;
+  border-radius: 10px;
+  border-top: 3px solid var(--line-strong);
+  box-shadow: var(--shadow-sm);
+}
+.stat-chip b { font-size: 1.4rem; font-weight: 800; }
+.stat-chip:first-child { border-top-color: var(--accent); }
+.stat-chip:first-child b { color: var(--accent); }
+.stat-chip--soft { border-top-color: var(--brand-yellow); }
+.stat-chip--ok { border-top-color: var(--brand-green); }
+.stat-chip--bad { border-top-color: var(--brand-red); }
+
+/* Barra de acciones como panel. */
+.toolbar {
+  padding: .65rem .75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.toolbar .divider { width: 1px; align-self: stretch; background: var(--line); margin: 0 .15rem; }
+
+/* Botones: más cuerpo, iconos, elevación suave. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  border-radius: 8px;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease, transform .1s ease;
+}
+.btn svg { flex-shrink: 0; }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.toolbar .btn { font-size: .84rem; padding: .5rem .95rem; }
+.btn-primary {
+  background: linear-gradient(180deg, #2e44a3, var(--accent));
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary:hover { box-shadow: var(--shadow-md); }
+.btn-outline-primary { background: var(--surface); }
+.btn-outline-primary:hover { color: #fff !important; box-shadow: var(--shadow-md); }
+.btn:disabled, .btn.disabled { opacity: .45; box-shadow: none; }
+.btn-outline-danger {
+  color: var(--bad-ink);
+  background: var(--surface);
+  border-color: var(--bad-chip);
+}
+.btn .badge-count {
+  min-width: 1.4em;
+  padding: .05em .45em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .08);
+  font-size: .75rem;
+  font-variant-numeric: tabular-nums;
+}
+#btn-logout { border-color: var(--line-strong); }
+#btn-logout:hover { background: var(--bad-bg) !important; color: var(--bad-ink) !important; border-color: var(--bad-chip) !important; }
+
+/* Buscador. */
+#buscador {
+  padding: .5rem .8rem .5rem 2.1rem;
+  border-radius: 8px;
+  border-color: var(--line-strong);
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23878d95' stroke-width='2' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat .7rem center;
+}
+
+/* Encabezado de tabla en azul institucional. */
+.table-responsive { border-radius: 12px; box-shadow: var(--shadow-sm); }
+.table > thead > tr > th {
+  background: var(--accent);
+  color: #fff;
+  font-size: .78rem;
+  letter-spacing: .06em;
+  border-bottom: 3px solid var(--brand-cyan);
+  padding: .75rem .7rem;
+}
+.table > thead input[type="checkbox"] { accent-color: var(--brand-cyan); }
+.chk-marcar { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+/* Sin separadores verticales heredados de Bootstrap en el encabezado. */
+.table > thead > tr > th { border-left: 0; border-right: 0; border-top: 0; box-shadow: none; }
+@media (max-width: 768px) {
+  /* Menu en varias lineas: evita scroll horizontal en pantallas angostas. */
+  .navbar .container > div { flex-wrap: wrap; }
+  .nav-link { font-size: .85rem; padding: .35rem .65rem !important; }
+  .toolbar .divider { display: none; }
+  .navbar { position: static; }
 }
