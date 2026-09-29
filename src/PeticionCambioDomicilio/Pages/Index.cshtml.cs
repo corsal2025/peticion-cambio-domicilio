@@ -242,11 +242,14 @@ public sealed class IndexModel : PageModel
         return RedirectToPage();
     }
 
-    /// <summary>Borrar selección: desmarca de una vez todas las casillas marcadas. No borra datos.</summary>
-    public IActionResult OnPostDesmarcarTodas()
+    /// <summary>Borrar selección: elimina las peticiones marcadas. La confirmacion la hace la pantalla. Respalda antes.</summary>
+    public IActionResult OnPostBorrarSeleccion()
     {
-        var n = _repository.DesmarcarTodas();
-        TempData["Flash"] = $"Se desmarcaron {n} petición(es).";
+        var backup = _repository.Backup("borrarseleccion");
+        var n = _repository.DeleteMarcadas();
+        TempData["Flash"] = backup is not null
+            ? $"Se borraron {n} petición(es) seleccionada(s). Respaldo guardado en {backup}."
+            : $"Se borraron {n} petición(es) seleccionada(s). ATENCIÓN: no se pudo guardar respaldo.";
         return RedirectToPage();
     }
 

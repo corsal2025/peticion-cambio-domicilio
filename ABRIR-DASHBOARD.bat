@@ -1,16 +1,11 @@
 @echo off
-REM Abre el dashboard Peticion de Cambio de Domicilio.
-REM Doble clic en este archivo.
+REM Abre el dashboard de Peticion de Cambio de Domicilio.
+cd /d "%~dp0publish"
 
-cd /d "%~dp0src\PeticionCambioDomicilio"
-
-echo Compilando y levantando el dashboard...
-echo.
-
-start "" http://localhost:5020
-
-dotnet run -c Release
-
-echo.
-echo El dashboard se cerro. Podes cerrar esta ventana.
-pause
+if exist "abrir-dashboard.ps1" (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0publish\abrir-dashboard.ps1"
+) else (
+    cd /d "%~dp0src\PeticionCambioDomicilio"
+    start "" http://localhost:5020
+    dotnet run -c Release
+)

@@ -16,6 +16,14 @@ $root = Split-Path $PSScriptRoot -Parent
 $project = Join-Path $root "src\PeticionCambioDomicilio\PeticionCambioDomicilio.csproj"
 $publishPath = Join-Path $root "publish"
 
+# Detener proceso previo si esta en ejecucion para no bloquear la sobreescritura del .exe
+$corriendo = Get-Process -Name "PeticionCambioDomicilio" -ErrorAction SilentlyContinue
+if ($corriendo) {
+    Write-Host "Deteniendo instancia anterior de PeticionCambioDomicilio..." -ForegroundColor Yellow
+    $corriendo | Stop-Process -Force
+    Start-Sleep -Milliseconds 800
+}
+
 Write-Host "Publicando .exe autocontenido..." -ForegroundColor Cyan
 
 dotnet publish $project `

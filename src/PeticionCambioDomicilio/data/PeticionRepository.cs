@@ -376,6 +376,15 @@ public sealed class PeticionRepository
         return cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Borra las filas marcadas. Devuelve cuantas se borraron.</summary>
+    public int DeleteMarcadas()
+    {
+        using var cn = Open();
+        using var cmd = cn.CreateCommand();
+        cmd.CommandText = "DELETE FROM Peticion WHERE Marcada = 1;";
+        return cmd.ExecuteNonQuery();
+    }
+
     public void Delete(long id)
     {
         using var cn = Open();

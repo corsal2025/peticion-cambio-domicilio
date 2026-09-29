@@ -90,4 +90,19 @@ public class ImportacionManualYComunasTests : IDisposable
 
         Assert.Equal(2, reabierto.All().Count);
     }
+
+    [Fact]
+    public void DeleteMarcadas_borra_solo_las_filas_marcadas()
+    {
+        var repo = new PeticionRepository(Path.Combine(_dir, "peticiones.db"));
+        repo.AddIfNew(new Peticion { NombreCompleto = "A", Rut = "11.111.111-1", Comuna = "ARICA" });
+        repo.AddIfNew(new Peticion { NombreCompleto = "B", Rut = "22.222.222-2", Comuna = "ARICA" });
+        var marcada = repo.All().First(p => p.NombreCompleto == "A");
+        repo.ToggleMarcada(marcada.Id);
+
+        var n = repo.DeleteMarcadas();
+
+        Assert.Equal(1, n);
+        Assert.Equal("B", Assert.Single(repo.All()).NombreCompleto);
+    }
 }

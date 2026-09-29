@@ -4,7 +4,6 @@ using PeticionCambioDomicilio.Data;
 using PeticionCambioDomicilio.Domain;
 using PeticionCambioDomicilio.Excel;
 using PeticionCambioDomicilio.Ews;
-using PeticionCambioDomicilio.Relay;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,50 +48,9 @@ builder.Services.AddRazorPages();
 var app = builder.Build();
 
 // Los modos CLI necesitan consola: el .exe es WinExe (sin ventana propia).
-if (args.Any(a => a.StartsWith("--import") || a == "--send-test" || a == "--test-ews" || a == "--relay"))
+if (args.Any(a => a.StartsWith("--import") || a == "--send-test" || a == "--test-ews"))
 {
     ConsoleAttach.ToParentIfAny();
-}
-
-// Relay hacia el worker Cloudflare: dotnet run -- --relay
-// El .exe queda haciendo polling de /api/relay/pendientes y envia por el EWS local de
-// siempre (mismo IMailSender que usa el dashboard) — no reemplaza nada existente, es
-// un modo adicional para cuando D1 manda como fuente de verdad y el correo sigue
-// saliendo desde una PC municipal con la VPN/red que ve Exchange.
-if (args.Contains("--relay"))
-{
-    if (string.IsNullOrWhiteSpace(options.RelayUrl))
-    {
-        Console.Error.WriteLine("Falta Peticion:RelayUrl en appsettings.Local.json.");
-        return;
-    }
-
-    var sender = app.Services.GetRequiredService<IMailSender>();
-    if (!sender.IsConfigured)
-    {
-        Console.Error.WriteLine("El transporte EWS no esta configurado (faltan Url/Username/Password).");
-        return;
-    }
-
-    using var http = new HttpClient { BaseAddress = new Uri(options.RelayUrl.TrimEnd('/') + "/") };
-    if (!string.IsNullOrEmpty(options.RelaySecret))
-    {
-        http.DefaultRequestHeaders.Add("X-Relay-Secret", options.RelaySecret);
-    }
-
-    var relayClient = new RelayClient(http, sender);
-
-    using var cts = new CancellationTokenSource();
-    Console.CancelKeyPress += (_, e) =>
-    {
-        e.Cancel = true;
-        cts.Cancel();
-    };
-
-    Console.WriteLine($"Relay activo contra {options.RelayUrl} (Ctrl+C para detener)...");
-    await relayClient.RunAsync(limite: 10, intervalo: TimeSpan.FromSeconds(30), cts.Token);
-    Console.WriteLine("Relay detenido.");
-    return;
 }
 
 // Diagnostico de la conexion al buzon: dotnet run -- --test-ews
