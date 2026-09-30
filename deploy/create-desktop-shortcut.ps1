@@ -37,6 +37,14 @@ if (-not `$corriendo) {
 "@
 Set-Content -Path $launcherPath -Value $launcher -Encoding UTF8
 
+$icoPath = Join-Path $PublishPath "logo-municipal.ico"
+if (-not (Test-Path $icoPath)) {
+    $srcIco = Join-Path (Split-Path $PSScriptRoot -Parent) "src\PeticionCambioDomicilio\logo-municipal.ico"
+    if (Test-Path $srcIco) {
+        Copy-Item $srcIco $icoPath -Force
+    }
+}
+
 $desktopPath = [Environment]::GetFolderPath("Desktop")
 $shortcutPath = Join-Path $desktopPath "Peticion Cambio Domicilio - Dashboard.lnk"
 
@@ -46,7 +54,11 @@ $shortcut.TargetPath = "powershell.exe"
 $shortcut.Arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$launcherPath`""
 $shortcut.WorkingDirectory = $PublishPath
 $shortcut.Description = "Abrir el dashboard de Peticion de Cambio de Domicilio"
-$shortcut.IconLocation = "$exePath,0"
+if (Test-Path $icoPath) {
+    $shortcut.IconLocation = "$icoPath,0"
+} else {
+    $shortcut.IconLocation = "$exePath,0"
+}
 $shortcut.Save()
 
 Write-Host "Acceso directo creado en: $shortcutPath" -ForegroundColor Green

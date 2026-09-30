@@ -265,9 +265,9 @@
                         _ => "— sin subir —",
                     };
                 }
-                <form method="post" asp-page-handler="EstadoCarpeta" class="carpeta-form d-inline">
+                <form method="post" asp-page-handler="EstadoCarpeta" class="carpeta-form d-inline js-carpeta-form" data-id="@p.Id">
                     <input type="hidden" name="id" value="@p.Id" />
-                    <select name="estado" class="carpeta-select" title="Estado de la carpeta" onchange="this.form.submit()">
+                    <select name="estado" class="carpeta-select js-carpeta-select" title="Estado de la carpeta">
                         @foreach (var v in EstadoCarpetaCatalog.OpcionesDashboard)
                         {
                             <option value="@v" selected="@(opcionActual == v ? "selected" : null)">@EtiquetaCarpeta(v)</option>
@@ -465,5 +465,45 @@
         };
         buscador.addEventListener("input", filtrar);
     }
+
+    // Selección de celda individual: al hacer clic en cualquier celda de dato se resalta en amarillo
+    document.querySelector("table")?.addEventListener("click", function (ev) {
+        var td = ev.target.closest("tbody td");
+        if (!td || ev.target.closest("button, a, input, select, form")) return;
+        var previa = document.querySelector("td.celda-activa");
+        if (previa && previa !== td) previa.classList.remove("celda-activa");
+        td.classList.toggle("celda-activa");
+    });
+
+    // Actualización de estado de carpeta sin recargar ni hacer saltar la página
+    document.querySelectorAll(".js-carpeta-select").forEach(function (select) {
+        select.addEventListener("change", function () {
+            var form = select.closest("form");
+            if (!form) return;
+            var data = new FormData(form);
+            var token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || "";
+            var url = location.pathname + "?handler=EstadoCarpeta";
+
+            fetch(url, {
+                method: "POST",
+                headers: {
+                    "X-Requested-With": "fetch",
+                    "RequestVerificationToken": token
+                },
+                body: data
+            }).then(function (res) {
+                if (!res.ok) throw new Error("Error en el servidor");
+                return res.json();
+            }).then(function (json) {
+                var fila = document.getElementById("fila-" + form.dataset.id);
+                if (fila && json.finalizado) {
+                    fila.classList.remove("fila-enviada", "fila-pendiente");
+                    fila.classList.add("fila-resuelta");
+                }
+            }).catch(function (err) {
+                console.error("No se pudo actualizar el estado:", err);
+            });
+        });
+    });
 </script>
 }

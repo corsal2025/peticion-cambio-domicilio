@@ -26,11 +26,11 @@
   --shadow-sm: 0 1px 2px rgba(20, 30, 70, .06), 0 1px 3px rgba(20, 30, 70, .08);
   --shadow-md: 0 4px 14px rgba(20, 30, 70, .10);
 
-  --ok-ink: #1f7a4d;   --ok-bg: #e7f3ec;   --ok-rail: #2e9c66;   --ok-chip: #d3ead9;
+  --ok-ink: #5b21b6;   --ok-bg: #f3e8ff;   --ok-rail: #8b5cf6;   --ok-chip: #ede9fe;
   --warn-ink: #9a6212; --warn-bg: #fbf0dd;  --warn-rail: #d99513; --warn-chip: #fbe6c4;
   --bad-ink: #b23636;  --bad-bg: #fbe9e9;   --bad-rail: #d24848;  --bad-chip: #f6d8d8;
-  --mark-ink: #0f5c6b; --mark-bg: #e3eef0;  --mark-rail: #2f8fa3;
-  --done-ink: #1f5a94; --done-bg: #e1ecfa;  --done-rail: #2c6fb0; --done-chip: #cfe0f6;
+  --mark-ink: #854d0e; --mark-bg: #fef08a;  --mark-rail: #eab308;
+  --done-ink: #0f2d59; --done-bg: #bfdbfe;  --done-rail: #1d4ed8; --done-chip: #93c5fd;
 
   --radius: 8px;
   --radius-sm: 6px;
@@ -315,28 +315,37 @@ main { padding-top: 1.4rem; }
 .table > tbody > tr.fila-pendiente > td:first-child { box-shadow: inset 3px 0 0 var(--line-strong); }
 .table > tbody > tr.fila-pendiente:hover > td { background: #fafaf8 !important; }
 
-.table > tbody > tr.fila-enviada > td { background: var(--ok-bg) !important; }
-.table > tbody > tr.fila-enviada > td:first-child { box-shadow: inset 3px 0 0 var(--ok-rail); }
-.table > tbody > tr.fila-enviada:hover > td { background: #dcecdf !important; }
+.table > tbody > tr.fila-enviada > td { background: var(--ok-bg) !important; color: var(--ok-ink); }
+.table > tbody > tr.fila-enviada > td:first-child { box-shadow: inset 4px 0 0 var(--ok-rail); }
+.table > tbody > tr.fila-enviada:hover > td { background: #e9d5ff !important; }
 
 .table > tbody > tr.fila-sincorreo > td { background: var(--warn-bg) !important; }
-.table > tbody > tr.fila-sincorreo > td:first-child { box-shadow: inset 3px 0 0 var(--warn-rail); }
+.table > tbody > tr.fila-sincorreo > td:first-child { box-shadow: inset 4px 0 0 var(--warn-rail); }
 
 .table > tbody > tr.fila-error > td { background: var(--bad-bg) !important; }
-.table > tbody > tr.fila-error > td:first-child { box-shadow: inset 3px 0 0 var(--bad-rail); }
+.table > tbody > tr.fila-error > td:first-child { box-shadow: inset 4px 0 0 var(--bad-rail); }
 
 .table > tbody > tr.fila-rutinvalido > td { background: var(--warn-bg) !important; }
-.table > tbody > tr.fila-rutinvalido > td:first-child { box-shadow: inset 3px 0 0 var(--warn-rail); }
+.table > tbody > tr.fila-rutinvalido > td:first-child { box-shadow: inset 4px 0 0 var(--warn-rail); }
 
-.table > tbody > tr.fila-marcada > td { background: var(--mark-bg) !important; }
-.table > tbody > tr.fila-marcada > td:first-child { box-shadow: inset 3px 0 0 var(--mark-rail); }
-.table > tbody > tr.fila-marcada:hover > td { background: #d4e7ec !important; }
+/* Fila marcada / seleccionada: amarillo suave con riel dorado */
+.table > tbody > tr.fila-marcada > td { background: var(--mark-bg) !important; color: var(--mark-ink) !important; }
+.table > tbody > tr.fila-marcada > td:first-child { box-shadow: inset 4px 0 0 var(--mark-rail); }
+.table > tbody > tr.fila-marcada:hover > td { background: #fde047 !important; }
 
-/* Carpeta subida = proceso terminado: fila azul, al final de la lista. */
-.table > tbody > tr.fila-resuelta > td { background: var(--done-bg) !important; color: var(--done-ink); }
-.table > tbody > tr.fila-resuelta > td:first-child { box-shadow: inset 3px 0 0 var(--done-rail); }
-.table > tbody > tr.fila-resuelta:hover > td { background: #d2e2f6 !important; }
-.table > tbody > tr.fila-resuelta > td.dato { color: var(--done-ink); }
+/* Selección de celda individual al hacer clic (amarillo destacado con borde) */
+.table > tbody > tr > td.celda-activa {
+  background: #fde047 !important;
+  color: #713f12 !important;
+  outline: 2px solid #ca8a04;
+  outline-offset: -2px;
+}
+
+/* Carpeta subida / terminada: azul más oscuro */
+.table > tbody > tr.fila-resuelta > td { background: var(--done-bg) !important; color: var(--done-ink); font-weight: 500; }
+.table > tbody > tr.fila-resuelta > td:first-child { box-shadow: inset 4px 0 0 var(--done-rail); }
+.table > tbody > tr.fila-resuelta:hover > td { background: #93c5fd !important; }
+.table > tbody > tr.fila-resuelta > td.dato { color: var(--done-ink); font-weight: 700; }
 
 /* ---------- Directorio de comunas / config ---------- */
 .table-striped > tbody > tr:nth-of-type(odd) > td { background: #fafaf8; }
