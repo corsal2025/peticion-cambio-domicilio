@@ -103,8 +103,8 @@ public static class EstadoCarpetaCatalog
             "se encuentra en of 43" or "se encuentra en of43" => "SE ENCUENTRA EN OF. 43",
             "cambio dom subido a conaset" => "CAMBIO DOM. SUBIDO A CONASET",
             "cambio de dom subido con correo" => "CAMBIO DOM. SUBIDO CON CORREO",
-            "" => CambioDeDomicilio,
-            _ => crudo?.Trim().ToUpperInvariant() ?? CambioDeDomicilio,
+            "" => string.Empty,
+            _ => crudo?.Trim().ToUpperInvariant() ?? string.Empty,
         };
     }
 }

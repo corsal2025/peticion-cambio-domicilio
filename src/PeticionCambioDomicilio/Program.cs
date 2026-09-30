@@ -6,6 +6,7 @@ using PeticionCambioDomicilio.Excel;
 using PeticionCambioDomicilio.Ews;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseUrls("http://*:5020");
 
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 

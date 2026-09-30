@@ -176,10 +176,10 @@ public sealed class PeticionRepository
         cmd.CommandText = """
             INSERT INTO Peticion
                 (NombreCompleto, Rut, Comuna, Clases, FechaSolicitud, Origen, Oficina,
-                 OrdenImportacion, RutInvalido, Estado, CreadaEn, EstadoCarpeta)
+                 OrdenImportacion, RutInvalido, Estado, CreadaEn, EstadoCarpeta, EnviadaEn)
             VALUES
                 ($nombre, $rut, $comuna, $clases, $fecha, $origen, $oficina,
-                 $orden, $rutInvalido, $estado, $creada, $estadoCarpeta)
+                 $orden, $rutInvalido, $estado, $creada, $estadoCarpeta, $enviadaEn)
             ON CONFLICT (Rut, Comuna) DO UPDATE SET
                 NombreCompleto   = excluded.NombreCompleto,
                 Clases           = excluded.Clases,
@@ -201,6 +201,7 @@ public sealed class PeticionRepository
         cmd.Parameters.AddWithValue("$estado", (int)p.Estado);
         cmd.Parameters.AddWithValue("$creada", p.CreadaEn.ToString("o"));
         cmd.Parameters.AddWithValue("$estadoCarpeta", p.EstadoCarpeta);
+        cmd.Parameters.AddWithValue("$enviadaEn", (object?)p.EnviadaEn?.ToString("o") ?? DBNull.Value);
         cmd.ExecuteNonQuery();
 
         return !yaExistia;

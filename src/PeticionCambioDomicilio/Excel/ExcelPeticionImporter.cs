@@ -247,12 +247,11 @@ public sealed class ExcelPeticionImporter
                 filas++;
                 orden++;
 
-                var estadoCrudo = row.Cell(cEstado.Value).GetString();
+                var estadoCrudo = row.Cell(cEstado.Value).GetString().Trim();
                 var esCambioDomicilio = TextNormalization.Fold(estadoCrudo) == ordenObjetivo;
                 var rangoExcel = EstadoCarpetaCatalog.Rango(estadoCrudo);
 
-                // Fila de otro trámite (1ª licencia, canje…) que no es una etapa posterior del
-                // cambio de domicilio: no hay nada que hacer con ella.
+                // Fila de otro trámite (1ª licencia, canje…) o vacía que no pertenece al flujo:
                 if (!esCambioDomicilio && rangoExcel < 2)
                 {
                     continue;
@@ -260,7 +259,16 @@ public sealed class ExcelPeticionImporter
 
                 var nombre = row.Cell(cNombre.Value).GetString().Trim();
                 var rutRaw = row.Cell(cRut.Value).GetString().Trim();
-                var comunaRaw = row.Cell(cComuna.Value).GetString().Trim();
+                var comunaCell = row.Cell(cComuna.Value);
+
+                // Si la celda de comuna es una fecha real (formato DateTime o texto de fecha),
+                // significa que no es un cambio de domicilio donde anotaron la comuna en esa columna:
+                if (comunaCell.DataType == XLDataType.DateTime || ReadDate(comunaCell) != null)
+                {
+                    continue;
+                }
+
+                var comunaRaw = comunaCell.GetString().Trim();
                 var clases = cClases is null ? null : row.Cell(cClases.Value).GetString().Trim();
                 var fecha = cFecha is null ? null : ReadDate(row.Cell(cFecha.Value));
                 var fechaSubida = cFechaSubida is null ? null : ReadDate(row.Cell(cFechaSubida.Value));
@@ -273,8 +281,8 @@ public sealed class ExcelPeticionImporter
                           + "|"
                           + (comunaCanonica ?? (comunaRaw.Length > 0 ? comunaRaw : "(sin comuna)"));
 
-                // Etapa posterior del flujo (SOLICITADO / SUBIDA…): si ya teníamos la petición, se
-                // hace avanzar su carpeta y se anota la fecha de subida. No se crean peticiones acá.
+                // Si dice "CAMBIO DE DOMICILIO SOLICITADO" y ya fue pedida a otra comuna:
+                // Si ya la teníamos en la base, avanzamos su estado. Si no estaba, se ingresa como Enviada/Solicitada.
                 if (!esCambioDomicilio)
                 {
                     if (sincronizarCarpeta is not null && porClave is not null
@@ -287,11 +295,15 @@ public sealed class ExcelPeticionImporter
                         {
                             sincro++;
                         }
-
-                        vistas.Add(clave); // ya no dice "CAMBIO DE DOMICILIO" pero sigue siendo nuestra
+                        vistas.Add(clave);
+                        continue;
                     }
 
-                    continue;
+                    // Si ya está subida a CONASET/resuelta y no existía, no la traemos como petición activa
+                    if (rangoExcel >= 3)
+                    {
+                        continue;
+                    }
                 }
 
                 cd++;
@@ -308,6 +320,17 @@ public sealed class ExcelPeticionImporter
                     avisos.Add($"{sheet.Name}!fila {row.RowNumber()}: comuna \"{comunaRaw}\" no se reconoce en el directorio — se guarda para revisión.");
                 }
 
+                var estadoNorm = EstadoCarpetaCatalog.Normalizar(estadoCrudo);
+                var esSolicitado = string.Equals(estadoNorm, "CAMBIO DE DOMICILIO SOLICITADO", StringComparison.OrdinalIgnoreCase);
+
+                var estadoInicial = comunaCanonica is null 
+                    ? EstadoPeticion.SinCorreoComuna 
+                    : (esSolicitado ? EstadoPeticion.Enviada : EstadoPeticion.Borrador);
+
+                DateTimeOffset? enviadaEn = esSolicitado 
+                    ? (fecha.HasValue ? new DateTimeOffset(fecha.Value.ToDateTime(TimeOnly.MinValue)) : DateTimeOffset.Now) 
+                    : null;
+
                 var peticion = new Peticion
                 {
                     NombreCompleto = nombre.Length > 0 ? nombre : "(sin nombre)",
@@ -319,9 +342,10 @@ public sealed class ExcelPeticionImporter
                     Oficina = oficina,
                     OrdenImportacion = orden,
                     RutInvalido = rutInvalido,
-                    Estado = comunaCanonica is null ? EstadoPeticion.SinCorreoComuna : EstadoPeticion.Borrador,
-                    DetalleEstado = comunaCanonica is null ? $"Comuna del Excel: \"{comunaRaw}\"" : null,
-                    EstadoCarpeta = EstadoCarpetaCatalog.Normalizar(estadoCrudo),
+                    Estado = estadoInicial,
+                    EnviadaEn = enviadaEn,
+                    DetalleEstado = comunaCanonica is null ? $"Comuna del Excel: \"{comunaRaw}\"" : (esSolicitado ? "Registrada como solicitada en planilla Excel" : null),
+                    EstadoCarpeta = estadoNorm,
                 };
 
                 vistas.Add(clave);
@@ -336,21 +360,8 @@ public sealed class ExcelPeticionImporter
             }
         }
 
+        // Historial completo: NUNCA se eliminan peticiones existentes automáticamente.
         var obsoletas = 0;
-        if (existentes is not null && borrar is not null)
-        {
-            foreach (var vieja in existentes)
-            {
-                var esBorradorLimpio = vieja.Estado == EstadoPeticion.Borrador && !vieja.Marcada;
-                // Las cargadas a mano no vienen del Excel por definición: nunca son obsoletas.
-                var esManual = vieja.Oficina == Peticion.OficinaManual;
-                if (esBorradorLimpio && !esManual && !vistas.Contains(vieja.Rut + "|" + vieja.Comuna))
-                {
-                    borrar(vieja.Id);
-                    obsoletas++;
-                }
-            }
-        }
 
         return new ImportResult(hojas, filas, cd, nuevas, dup, rutInv, comunaNo, obsoletas, sincro, avisos);
     }
