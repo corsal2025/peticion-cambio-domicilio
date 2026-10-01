@@ -360,8 +360,26 @@ public sealed class ExcelPeticionImporter
             }
         }
 
-        // Historial completo: NUNCA se eliminan peticiones existentes automáticamente.
+        // Historial completo: sólo se da de baja lo que ya estaba cargado y no reaparece en el libro
+        // actual. Las peticiones cargadas a mano quedan protegidas aunque no estén en el Excel.
         var obsoletas = 0;
+        if (existentes is not null && borrar is not null)
+        {
+            foreach (var existente in existentes)
+            {
+                if (existente.Oficina == Peticion.OficinaManual)
+                {
+                    continue;
+                }
+
+                var clave = existente.Rut + "|" + existente.Comuna;
+                if (!vistas.Contains(clave) && !vistas.Contains(TextNormalization.Fold(existente.Rut) + "|" + TextNormalization.Fold(existente.Comuna)))
+                {
+                    borrar(existente.Id);
+                    obsoletas++;
+                }
+            }
+        }
 
         return new ImportResult(hojas, filas, cd, nuevas, dup, rutInv, comunaNo, obsoletas, sincro, avisos);
     }

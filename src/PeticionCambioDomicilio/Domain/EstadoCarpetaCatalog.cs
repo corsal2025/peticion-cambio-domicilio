@@ -44,6 +44,11 @@ public static class EstadoCarpetaCatalog
     public static int Rango(string? estadoCrudo)
     {
         var e = Normalizar(estadoCrudo);
+        if (string.IsNullOrWhiteSpace(e))
+        {
+            return 1;
+        }
+
         return e switch
         {
             "CAMBIO DE DOMICILIO" => 1,

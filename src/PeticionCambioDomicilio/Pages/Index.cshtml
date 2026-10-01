@@ -76,6 +76,20 @@
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4 20-7z"/></svg><span class="js-enviar-label">Enviar marcadas</span> <span class="badge-count js-marcadas-n">@Model.MarcadasPendientes</span>
         </button>
     </form>
+    <form method="post" class="js-marcar-enviadas-sin-correo"
+          onsubmit="return confirm('¿Registrar las filas marcadas como ENVIADAS sin mandar correo a la comuna?');">
+        <button asp-page-handler="MarcarMarcadasComoEnviadasSinCorreo"
+                class="btn btn-sm btn-outline-secondary"
+                disabled="@(Model.MarcadasPendientes == 0 ? "disabled" : null)">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l4 4L19 2"/><path d="M20 7v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg><span>Marcar como enviadas (sin correo)</span> <span class="badge-count js-marcadas-n">@Model.MarcadasPendientes</span>
+        </button>
+    </form>
+    <form method="post" onsubmit="return confirm('¿Dejar TODAS las peticiones pendientes como YA SUBIDAS sin mandar correo a las comunas?');">
+        <button asp-page-handler="MarcarTodoComoEnviadasSinCorreo" class="btn btn-sm btn-outline-dark"
+                disabled="@(Model.Peticiones.Count(p => p.Estado is EstadoPeticion.Borrador or EstadoPeticion.SinCorreoComuna or EstadoPeticion.Error) == 0 ? "disabled" : null)">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Ver todas como ya subidas</span>
+        </button>
+    </form>
     <form method="post" asp-page-handler="BorrarSeleccion" class="js-borrar-seleccion"
           onsubmit="return confirm('¿BORRAR las ' + document.querySelector('.js-seleccion-n').textContent.trim() + ' peticiones seleccionadas? Se borra también su historial de envío. Se guarda un respaldo automático antes. El Excel NO se toca.');">
         <button asp-page-handler="BorrarSeleccion" id="btn-borrar-seleccion"

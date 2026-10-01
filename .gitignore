@@ -3,6 +3,7 @@ obj/
 *.log
 **/data/*.db
 **/data/*.db-*
+**/data/backups/
 appsettings.Local.json
 publish/
 .atl/

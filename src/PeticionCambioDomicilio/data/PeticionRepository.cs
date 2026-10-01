@@ -4,12 +4,13 @@ using PeticionCambioDomicilio.Domain;
 namespace PeticionCambioDomicilio.Data;
 
 /// <summary>SQLite sin ORM (mismo enfoque que LicenciasCarpetas). Un archivo data/peticiones.db.</summary>
-public sealed class PeticionRepository
+public sealed class PeticionRepository : IDisposable
 {
     private const int MaxBackups = 10;
 
     private readonly string _connectionString;
     private readonly string _dbPath;
+    private readonly List<SqliteConnection> _openedConnections = new();
 
     public PeticionRepository(string dbPath)
     {
@@ -147,8 +148,19 @@ public sealed class PeticionRepository
     private SqliteConnection Open()
     {
         var cn = new SqliteConnection(_connectionString);
+        _openedConnections.Add(cn);
         cn.Open();
         return cn;
+    }
+
+    public void Dispose()
+    {
+        foreach (var cn in _openedConnections)
+        {
+            try { cn.Dispose(); } catch { }
+        }
+
+        _openedConnections.Clear();
     }
 
     /// <summary>
@@ -176,10 +188,12 @@ public sealed class PeticionRepository
         cmd.CommandText = """
             INSERT INTO Peticion
                 (NombreCompleto, Rut, Comuna, Clases, FechaSolicitud, Origen, Oficina,
-                 OrdenImportacion, RutInvalido, Estado, CreadaEn, EstadoCarpeta, EnviadaEn)
+                 OrdenImportacion, RutInvalido, Estado, DetalleEstado, CreadaEn,
+                 EnviadaEn, DestinatariosCorreo, Marcada, EstadoCarpeta)
             VALUES
                 ($nombre, $rut, $comuna, $clases, $fecha, $origen, $oficina,
-                 $orden, $rutInvalido, $estado, $creada, $estadoCarpeta, $enviadaEn)
+                 $orden, $rutInvalido, $estado, $detalle, $creada,
+                 $enviadaEn, $destinatarios, $marcada, $estadoCarpeta)
             ON CONFLICT (Rut, Comuna) DO UPDATE SET
                 NombreCompleto   = excluded.NombreCompleto,
                 Clases           = excluded.Clases,
@@ -199,9 +213,12 @@ public sealed class PeticionRepository
         cmd.Parameters.AddWithValue("$orden", p.OrdenImportacion);
         cmd.Parameters.AddWithValue("$rutInvalido", p.RutInvalido ? 1 : 0);
         cmd.Parameters.AddWithValue("$estado", (int)p.Estado);
+        cmd.Parameters.AddWithValue("$detalle", (object?)p.DetalleEstado ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$creada", p.CreadaEn.ToString("o"));
-        cmd.Parameters.AddWithValue("$estadoCarpeta", p.EstadoCarpeta);
         cmd.Parameters.AddWithValue("$enviadaEn", (object?)p.EnviadaEn?.ToString("o") ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$destinatarios", (object?)p.DestinatariosCorreo ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$marcada", p.Marcada ? 1 : 0);
+        cmd.Parameters.AddWithValue("$estadoCarpeta", p.EstadoCarpeta);
         cmd.ExecuteNonQuery();
 
         return !yaExistia;
@@ -266,6 +283,76 @@ public sealed class PeticionRepository
         cmd.Parameters.AddWithValue("$dest", (object?)destinatarios ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Marca las filas seleccionadas como enviadas sin disparar correo alguno hacia la comuna.
+    /// Sirve para cerrar el flujo local cuando la carpeta ya quedó resuelta o se quiere dejar como
+    /// "ya enviada" sin que el sistema mande mails a otras municipalidades.
+    /// </summary>
+    public int MarcarMarcadasComoEnviadasSinCorreo(DateTimeOffset? enviadaEn = null)
+    {
+        var cuando = enviadaEn ?? DateTimeOffset.Now;
+        using var cn = Open();
+        using var cmd = cn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE Peticion
+               SET Estado = $estadoEnviada,
+                   DetalleEstado = $detalle,
+                   EnviadaEn = $enviada,
+                   DestinatariosCorreo = NULL,
+                   Marcada = 0,
+                   EstadoCarpeta = CASE
+                       WHEN EstadoCarpeta = $carpetaOriginal THEN $carpetaSolicitada
+                       ELSE EstadoCarpeta
+                   END
+             WHERE Marcada = 1
+               AND Estado IN ($estadoBorrador, $estadoSinCorreo, $estadoError);
+            SELECT changes();
+            """;
+        cmd.Parameters.AddWithValue("$estadoEnviada", (int)EstadoPeticion.Enviada);
+        cmd.Parameters.AddWithValue("$detalle", "Marcada como enviada sin enviar correo a la comuna.");
+        cmd.Parameters.AddWithValue("$enviada", cuando.ToString("o"));
+        cmd.Parameters.AddWithValue("$carpetaOriginal", EstadoCarpetaCatalog.CambioDeDomicilio);
+        cmd.Parameters.AddWithValue("$carpetaSolicitada", EstadoCarpetaCatalog.SinSubir);
+        cmd.Parameters.AddWithValue("$estadoBorrador", (int)EstadoPeticion.Borrador);
+        cmd.Parameters.AddWithValue("$estadoSinCorreo", (int)EstadoPeticion.SinCorreoComuna);
+        cmd.Parameters.AddWithValue("$estadoError", (int)EstadoPeticion.Error);
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
+    /// <summary>
+    /// Marca todas las peticiones pendientes como ya enviadas localmente sin disparar correo externo.
+    /// Útil para dejar el tablero como "todo subido" cuando se quiere cerrar el flujo sin tocar otras comunas.
+    /// </summary>
+    public int MarcarTodasComoEnviadasSinCorreo(DateTimeOffset? enviadaEn = null)
+    {
+        var cuando = enviadaEn ?? DateTimeOffset.Now;
+        using var cn = Open();
+        using var cmd = cn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE Peticion
+               SET Estado = $estadoEnviada,
+                   DetalleEstado = $detalle,
+                   EnviadaEn = $enviada,
+                   DestinatariosCorreo = NULL,
+                   Marcada = 0,
+                   EstadoCarpeta = CASE
+                       WHEN EstadoCarpeta = $carpetaOriginal THEN $carpetaSolicitada
+                       ELSE EstadoCarpeta
+                   END
+             WHERE Estado IN ($estadoBorrador, $estadoSinCorreo, $estadoError);
+            SELECT changes();
+            """;
+        cmd.Parameters.AddWithValue("$estadoEnviada", (int)EstadoPeticion.Enviada);
+        cmd.Parameters.AddWithValue("$detalle", "Marcada como enviada sin enviar correo a la comuna.");
+        cmd.Parameters.AddWithValue("$enviada", cuando.ToString("o"));
+        cmd.Parameters.AddWithValue("$carpetaOriginal", EstadoCarpetaCatalog.CambioDeDomicilio);
+        cmd.Parameters.AddWithValue("$carpetaSolicitada", EstadoCarpetaCatalog.SinSubir);
+        cmd.Parameters.AddWithValue("$estadoBorrador", (int)EstadoPeticion.Borrador);
+        cmd.Parameters.AddWithValue("$estadoSinCorreo", (int)EstadoPeticion.SinCorreoComuna);
+        cmd.Parameters.AddWithValue("$estadoError", (int)EstadoPeticion.Error);
+        return Convert.ToInt32(cmd.ExecuteScalar());
     }
 
     /// <summary>

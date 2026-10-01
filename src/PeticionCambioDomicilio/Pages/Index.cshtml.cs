@@ -185,6 +185,48 @@ public sealed class IndexModel : PageModel
     }
 
     /// <summary>
+    /// Marca como enviadas las peticiones marcadas sin disparar correo externo a la comuna.
+    /// Útil para cerrar filas ya tratadas localmente sin mandar mails a otras municipalidades.
+    /// </summary>
+    public IActionResult OnPostMarcarMarcadasComoEnviadasSinCorreo()
+    {
+        var marcadasPendientes = _repository.All()
+            .Where(p => p.Marcada && EsPendiente(p))
+            .ToList();
+
+        if (marcadasPendientes.Count == 0)
+        {
+            TempData["Flash"] = "No hay peticiones marcadas pendientes para registrar como enviadas sin correo.";
+            return RedirectToPage();
+        }
+
+        var count = _repository.MarcarMarcadasComoEnviadasSinCorreo(DateTimeOffset.Now);
+        TempData["Flash"] = $"Se marcaron {count} petición(es) como enviadas sin enviar correo a la comuna.";
+        return RedirectToPage();
+    }
+
+    /// <summary>
+    /// Marca todas las peticiones pendientes como ya subidas en el tablero, sin despachar correo.
+    /// Se usa para dejar la vista general como si todo el lote estuviera ya resuelto.
+    /// </summary>
+    public IActionResult OnPostMarcarTodoComoEnviadasSinCorreo()
+    {
+        var pendientes = _repository.All()
+            .Where(EsPendiente)
+            .ToList();
+
+        if (pendientes.Count == 0)
+        {
+            TempData["Flash"] = "No hay peticiones pendientes para dejar como ya subidas.";
+            return RedirectToPage();
+        }
+
+        var count = _repository.MarcarTodasComoEnviadasSinCorreo(DateTimeOffset.Now);
+        TempData["Flash"] = $"Se dejaron {count} petición(es) como ya subidas sin enviar correo a la comuna.";
+        return RedirectToPage();
+    }
+
+    /// <summary>
     /// Busca en TODO el libro (por RUT, o por nombre si el RUT no valida) el estado de la carpeta
     /// de cada petición y lo sincroniza si en el Excel figura más avanzado. No importa filas nuevas.
     /// </summary>
