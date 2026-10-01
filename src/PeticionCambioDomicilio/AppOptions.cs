@@ -28,6 +28,9 @@ public sealed class AppOptions
     /// <summary>Ruta al CSV del directorio de comunas. Vacío = data/comunas.csv junto al ejecutable.</summary>
     public string? ComunaDirectoryCsvPath { get; set; }
 
+    /// <summary>Carpeta para copias locales de la base. Vacío = Documentos/RespaldoPeticionCambioDomicilio.</summary>
+    public string? BackupDirectory { get; set; }
+
     /// <summary>Correo institucional (aparece como firma / remitente).</summary>
     public string MailboxAddress { get; set; } = "cambiodedomicilio@munivalpo.cl";
 

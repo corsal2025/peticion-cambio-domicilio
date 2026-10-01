@@ -91,6 +91,17 @@ Publica un `.exe` autocontenido (no necesita el SDK) en `publish\` y crea el acc
 **"Peticion Cambio Domicilio - Dashboard"** en el Escritorio. El `.exe` es `WinExe`: corre sin
 ventana de consola y no aparece en la barra de tareas.
 
+### Respaldos locales
+
+La aplicación crea un respaldo diario mientras está abierta, permite crear uno con **Respaldar ahora**
+y respalda antes de importaciones o borrados. Por defecto guarda hasta 30 copias en
+`Documentos\RespaldoPeticionCambioDomicilio`; la ruta se puede cambiar con `Peticion:BackupDirectory`
+en `appsettings.Local.json`. Los respaldos se hacen con la API online de SQLite, sin detener el servidor.
+
+Esta carpeta sigue estando en el mismo disco: protege ante errores o actualizaciones de la aplicación,
+pero no ante una falla física, robo o daño del equipo. Cuando haya un disco externo o carpeta de red,
+configura `Peticion:BackupDirectory` allí para tener una copia independiente.
+
 ## Diagnóstico del correo
 
 ```powershell
@@ -115,7 +126,6 @@ de `CambioDeDomicilio/publish/appsettings.json`, que ya lo tenía funcionando.
 - Credenciales EWS válidas (ver arriba).
 - Algarrobo y Llay-Llay no tienen correo ni en `comunas.csv` ni en la hoja `CORREOS` del libro:
   agregarlas desde la pantalla **Comunas**.
-- Pruebas automatizadas (proyecto de tests aún no creado).
 
 ## Estructura
 

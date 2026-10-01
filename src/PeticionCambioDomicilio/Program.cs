@@ -38,7 +38,12 @@ if (!File.Exists(comunaCsv) || new FileInfo(comunaCsv).Length == 0)
 builder.Services.AddSingleton(new ComunaDirectory(comunaCsv));
 
 var dbPath = Path.Combine(contentRoot, "data", "peticiones.db");
-builder.Services.AddSingleton(new PeticionRepository(dbPath));
+var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+var backupDirectory = !string.IsNullOrWhiteSpace(options.BackupDirectory)
+    ? options.BackupDirectory
+    : Path.Combine(userProfile, "Documents", "RespaldoPeticionCambioDomicilio");
+builder.Services.AddSingleton(new PeticionRepository(dbPath, backupDirectory));
+builder.Services.AddHostedService<PeticionBackupService>();
 
 builder.Services.AddSingleton<IMailSender, EwsMailSender>();
 builder.Services.AddSingleton<ExcelPeticionImporter>();
@@ -52,6 +57,23 @@ var app = builder.Build();
 if (args.Any(a => a.StartsWith("--import") || a == "--send-test" || a == "--test-ews"))
 {
     ConsoleAttach.ToParentIfAny();
+}
+
+if (args.Contains("--backup"))
+{
+    ConsoleAttach.ToParentIfAny();
+    var backup = app.Services.GetRequiredService<PeticionRepository>().Backup("manual");
+    if (backup is null)
+    {
+        Console.Error.WriteLine("No se pudo crear el respaldo local.");
+        Environment.ExitCode = 1;
+    }
+    else
+    {
+        Console.WriteLine($"Respaldo creado: {backup}");
+    }
+
+    return;
 }
 
 // Diagnostico de la conexion al buzon: dotnet run -- --test-ews

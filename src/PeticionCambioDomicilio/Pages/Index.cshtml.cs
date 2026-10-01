@@ -76,6 +76,15 @@ public sealed class IndexModel : PageModel
         ComunaNombres = _directory.ComunaNames();
     }
 
+    public IActionResult OnPostCrearRespaldo()
+    {
+        var backup = _repository.Backup("manual");
+        TempData["Flash"] = backup is null
+            ? "No se pudo crear el respaldo local. Revisa que la carpeta de respaldo tenga espacio y permisos de escritura."
+            : $"Respaldo local creado: {Path.GetFileName(backup)}";
+        return RedirectToPage();
+    }
+
     public IActionResult OnPostImportar()
     {
         if (!ExcelConfigurado)

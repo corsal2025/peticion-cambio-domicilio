@@ -6,24 +6,26 @@ namespace PeticionCambioDomicilio.Data;
 /// <summary>SQLite sin ORM (mismo enfoque que LicenciasCarpetas). Un archivo data/peticiones.db.</summary>
 public sealed class PeticionRepository : IDisposable
 {
-    private const int MaxBackups = 10;
+    private const int MaxBackups = 30;
 
     private readonly string _connectionString;
     private readonly string _dbPath;
+    private readonly string _backupDirectory;
     private readonly List<SqliteConnection> _openedConnections = new();
 
-    public PeticionRepository(string dbPath)
+    public PeticionRepository(string dbPath, string? backupDirectory = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
         _dbPath = dbPath;
+        _backupDirectory = backupDirectory ?? Path.Combine(Path.GetDirectoryName(dbPath)!, "backups");
         _connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
         Init();
     }
 
     /// <summary>
-    /// Copia el archivo de la base a <c>data/backups/</c> antes de una operación destructiva
-    /// (borrar todo, reimportar). Conserva los últimos <see cref="MaxBackups"/>. Nunca tira la
-    /// operación abajo: si el respaldo falla, se registra y se sigue.
+    /// Crea una copia consistente de SQLite antes de una operación destructiva.
+    /// Conserva los últimos <see cref="MaxBackups"/> respaldos y permite guardarlos fuera
+    /// del directorio de la aplicación.
     /// </summary>
     public string? Backup(string motivo)
     {
@@ -34,14 +36,19 @@ public sealed class PeticionRepository : IDisposable
                 return null;
             }
 
-            var dir = Path.Combine(Path.GetDirectoryName(_dbPath)!, "backups");
-            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(_backupDirectory);
 
             var slug = new string(motivo.Where(char.IsLetterOrDigit).ToArray());
-            var destino = Path.Combine(dir, $"peticiones-{DateTime.Now:yyyyMMdd-HHmmss}-{slug}.db");
-            File.Copy(_dbPath, destino, overwrite: false);
+            var destino = Path.Combine(_backupDirectory, $"peticiones-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{slug}.db");
+            using (var source = new SqliteConnection(_connectionString))
+            using (var target = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = destino }.ToString()))
+            {
+                source.Open();
+                target.Open();
+                source.BackupDatabase(target);
+            }
 
-            foreach (var viejo in new DirectoryInfo(dir)
+            foreach (var viejo in new DirectoryInfo(_backupDirectory)
                          .GetFiles("peticiones-*.db")
                          .OrderByDescending(f => f.Name)
                          .Skip(MaxBackups))
@@ -51,10 +58,28 @@ public sealed class PeticionRepository : IDisposable
 
             return destino;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SqliteException)
         {
             return null;
         }
+    }
+
+    public string? BackupDiario()
+    {
+        var prefijo = $"peticiones-{DateTime.Now:yyyyMMdd}-";
+        if (Directory.Exists(_backupDirectory))
+        {
+            var existente = new DirectoryInfo(_backupDirectory)
+                .GetFiles($"{prefijo}*-automatico.db")
+                .OrderByDescending(f => f.Name)
+                .FirstOrDefault();
+            if (existente is not null)
+            {
+                return existente.FullName;
+            }
+        }
+
+        return Backup("automatico");
     }
 
     private void Init()

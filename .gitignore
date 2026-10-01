@@ -4,6 +4,7 @@ obj/
 **/data/*.db
 **/data/*.db-*
 **/data/backups/
+/peticiones.db
 appsettings.Local.json
 publish/
 .atl/
